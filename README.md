@@ -1,302 +1,165 @@
 <p align="center">
-  <img width="120px" src="assets/img/Logo.png" alt="Neno" />
+  <img width="130px" src="assets/img/Logo.png" alt="Neno Music" />
 </p>
 
-<h1 align="center">Neno</h1>
+<h1 align="center">Neno Music</h1>
 
 <p align="center">
-  A fast, native-feeling desktop client for YouTube Music.<br />
-  Built with Tauri, React and TypeScript for <b>Windows, macOS and Linux</b>.
+  <b>A fast, modern, and beautiful music streaming client powered by YouTube Music.</b><br />
+  Built with Tauri v2, Rust, React, and TypeScript for <b>Android, Windows, macOS, and Linux</b>.
 </p>
 
 <p align="center">
-  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/github/downloads/jupiterbania/Neno-Music-App/total?style=for-the-badge&color=ff0033&label=downloads" alt="Downloads"></a>
-  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/github/package-json/v/jupiterbania/Neno-Music-App?style=for-the-badge&color=ff3d00&label=version" alt="Version"></a>
-  <a href="https://github.com/jupiterbania/Neno-Music-App/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jupiterbania/Neno-Music-App?style=for-the-badge&color=ff6900" alt="License"></a>
+  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/badge/version-v1.0.0-ff3d00?style=for-the-badge" alt="Version 1.0.0"></a>
+  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/badge/platform-Android%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-4f46e5?style=for-the-badge" alt="Platforms"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-0ea5e9?style=for-the-badge" alt="License"></a>
   <a href="https://github.com/jupiterbania/Neno-Music-App/stargazers"><img src="https://img.shields.io/github/stars/jupiterbania/Neno-Music-App?style=for-the-badge&color=ff9700&label=stars" alt="Stars"></a>
-  <a href="https://aur.archlinux.org/packages/neno"><img src="https://img.shields.io/aur/version/neno?style=for-the-badge&color=ffc300&label=AUR" alt="AUR"></a>
 </p>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/img/neno-d1-1.2.PNG" />
-    <source media="(prefers-color-scheme: light)" srcset="assets/img/neno-l4-1.2.PNG" />
-    <img src="assets/img/neno-d1-1.2.PNG" alt="Neno home view" width="900" />
-  </picture>
-</p>
+---
 
-> [!IMPORTANT]
-> Neno is an independent, unofficial project. It is not affiliated with, authorized by,
-> sponsored by, or endorsed by YouTube or Google.
+## 🎧 About Neno
 
-<br />
+**Neno** is a lightweight, ad-free, high-performance music application that delivers the entire YouTube Music catalog into a native, responsive, and gorgeous experience. Unlike web tabs and heavy Electron apps, Neno is powered by **Tauri 2** and a **Rust** backend, ensuring instant startup times, minimal memory consumption, and true native desktop and mobile capabilities.
 
-## About
+Whether you're listening on your desktop while gaming or coding, or streaming on your Android smartphone with background playback and lock-screen controls, Neno offers a seamless and premium listening journey.
 
-Neno brings YouTube Music to the desktop as its own application, not a browser tab. There is
-no official desktop client, so the goal is a fast, native-feeling one that holds up with large
-libraries.
+> [!NOTE]
+> Neno is an independent, community-driven open-source project and is not affiliated with, authorized, or endorsed by Google or YouTube.
 
-If you find it useful, **starring the repo** genuinely helps.
+---
 
-<br />
+## ✨ Features
 
-## Screenshots
+### 🚀 Instant Performance & Clean Experience
+- **Lightning-Fast Launch**: Opens directly into your music home dashboard without sluggish reload delays or frozen state.
+- **Ultra-Low Memory Footprint**: Native Rust architecture utilizes a fraction of the RAM required by typical browser or Electron clients.
+- **Zero Audio Ads**: Clean and uninterrupted music playback throughout your entire library.
 
-<table>
-  <tr>
-    <td width="50%"><b>Synced lyrics</b></td>
-    <td width="50%"><b>Artist page</b></td>
-  </tr>
-  <tr>
-    <td><img src="assets/img/neno-d-1.2.PNG" alt="Synced lyrics following the current line" /></td>
-    <td><img src="assets/img/neno-d4-1.2.PNG" alt="An artist page showing popular songs and releases" /></td>
-  </tr>
-  <tr>
-    <td><sub>Click a line to seek, nudge the timing if a match is off, and see which source the words came from.</sub></td>
-    <td><sub>Popular tracks and every release, filtered by albums, singles or EPs.</sub></td>
-  </tr>
-</table>
+### 📱 Android Background Playback & Native Integration
+- **Background Audio Service**: Keep listening when your screen is turned off or while using other apps.
+- **Lock Screen & Media Controls**: Rich notifications with play, pause, next, previous, and seekbar controls via Android `MediaSession`.
+- **Audio Focus Management**: Automatically pauses when you receive a phone call and gracefully resumes when finished.
 
-<table>
-  <tr>
-    <td width="50%"><b>Queue</b></td>
-    <td width="50%"><b>Library</b></td>
-  </tr>
-  <tr>
-    <td><img src="assets/img/neno-d3-1.2.PNG" alt="The queue panel open beside the home view" /></td>
-    <td><img src="assets/img/neno-l5-1.2.PNG" alt="The library songs list, with explicit badges and the now-playing meter" /></td>
-  </tr>
-  <tr>
-    <td><sub>Separates what you added by hand from what came next on its own.</sub></td>
-    <td><sub>Marks what is liked, downloaded and explicit at a glance.</sub></td>
-  </tr>
-</table>
+### 🎵 High-Fidelity Audio & Dual Audio Engine
+- **Audio Quality Selection**: Stream at High Quality (256 kbps), Standard Quality, or Low (Data Saver) mode.
+- **Dual Audio Pipeline**: Choose between native high-performance Rust audio processing (Rodio & Symphonia) or standard Web engine.
+- **Smart Gapless & Crossfade**: Smooth transitions between songs for DJ-like continuous flow.
 
-<p align="center">
-  <img src="assets/img/neno-set-1.2.PNG" alt="Neno settings, showing the library and lyrics options" width="860" />
-  <br />
-  <sub>Settings — quality, lyrics source, translation and text size, downloads and the disk cap.</sub>
-</p>
+### 🎤 Real-Time Synced Karaoke Lyrics
+- **Line-by-Line Synchronized Lyrics**: Words highlight in real-time as the artist sings.
+- **Interactive Lyric Seeking**: Tap or click any lyric line to instantly jump to that part of the song.
+- **Lyric Timing Offset**: Fine-tune sync delay (+/- ms) if lyrics are slightly ahead or behind.
+- **Multilingual Translation**: View automatic translations in over 20+ languages beneath original lyrics.
 
-<br />
+### 💾 Offline Downloads & Storage Manager
+- **One-Click Offline Downloads**: Download individual tracks, entire albums, or custom playlists to listen without an internet connection.
+- **Configurable Storage Ceiling**: Set maximum disk usage caps (e.g. 2 GB, 8 GB, etc.) with automatic smart cache management.
 
-## Features
+### 📊 Last.fm & Discord Rich Presence
+- **Discord Rich Presence**: Show friends what you're listening to in real-time on Discord, complete with album art and track progress.
+- **Last.fm Scrobbling**: Automatically scrobble tracks to your Last.fm profile with toggleable settings.
 
-| Feature | Description |
+### 🔍 Powerful Search & Discovery
+- **Instant Search**: Search through millions of songs, albums, artists, and community playlists.
+- **Curated Moods & Genres**: Explore charts, new releases, chill, workout, party, and focus categories.
+- **Quick Keyboard Shortcuts**: Access search instantly with `Ctrl + Space` from anywhere in the app.
+
+### 🎨 Sleek Modern UI & Customization
+- **Theme Support**: Sleek obsidian dark mode and clean light theme that match your system preferences.
+- **Mini Player**: Detachable floating compact player window with hover expand controls.
+- **Local Files & Tagging**: Play music stored on your local disk alongside streaming tracks.
+
+---
+
+## 📥 Downloads & Installation
+
+Pre-built binaries and packages are available on the **[Releases Page](https://github.com/jupiterbania/Neno-Music-App/releases/latest)**.
+
+### 📱 Android APK
+Download the appropriate APK file for your phone or tablet:
+- **`Neno-arm64-release.apk`**: Recommended for almost all modern Android phones (64-bit ARM).
+- **`Neno-arm-release.apk`**: For older 32-bit ARM devices.
+
+> **Installation Note**: Enable "Install unknown apps" in your Android settings for your browser or file manager when installing the APK for the first time.
+
+### 💻 Desktop (Windows, macOS, Linux)
+- **Windows**: Download the `.msi` installer or standalone executable from releases.
+- **Linux**: Available in `.deb`, `.rpm`, `.AppImage`, and Arch Linux AUR (`yay -S neno`).
+- **macOS**: Download the `.dmg` package from releases.
+
+---
+
+## 🛠️ Tech Stack & Architecture
+
+| Layer | Technologies Used |
 |---|---|
-| **Search** | Ctrl+Space from anywhere, across artists, songs, playlists and albums |
-| **Multiple tabs** | Each tab keeps its own queue, volume and player state — start an album in one, browse in another, and the first keeps playing |
-| **Offline downloads** | Save a song, a selection, or a whole album or playlist, with its own quality setting and a size cap you control |
-| **Mini player** | A morphing capsule that appears when you tab away; drag it anywhere, hover to expand |
-| **Synced lyrics** | Line-by-line lyrics that follow the song, unlike the official web client. Click a line to jump to it, nudge the timing if a match is off, and pick which source is tried first |
-| **Lyrics translation** | A translation under each line, in any of twenty languages, with an adjustable text size |
-| **Like & dislike** | Rate from the row, the player or the right-click menu — ratings sync to your YouTube Music account |
-| **Batch actions** | Shift/ctrl-select rows, then queue, download, add to a playlist or remove them together |
-| **Queue control** | Collapses to an artwork-only rail; end the queue at a track, generate more from it, shuffle or clear what's next |
-| **Recommendations** | Personalised suggestions plus a "surprise me" shuffle — hide the carousel if you would rather open on your library |
-| **Browse** | Explore, charts, moods and genres, and podcasts, with mood chips you can drill into |
-| **Local files** | Folders from your own machine sit alongside your library, with a tag editor for fixing metadata |
-| **Discord & Last.fm** | Rich Presence and scrobbling, each toggleable straight from the toolbar |
-| **Account support** | Sign in with Google for your library and playlists, and switch between channels on the same account |
-| **Playlist import/export** | Save a playlist to a file and bring it back, on this machine or another |
-| **Desktop integration** | Media keys, minimise to tray, launch at login, remembered window position, rebindable shortcuts |
-| **Light & dark themes** | Follows the OS by default, or pin either one — plus a reduced-motion mode |
-| **Caching** | Playlists, lyrics and artwork are cached, so revisits are instant |
-| **Auto-updates** | Signed updates install themselves; no manual re-download |
+| **Core Shell** | [Tauri 2](https://v2.tauri.app/) · Rust 2021 |
+| **Audio Processing** | Rodio · Symphonia (Opus / Matroska / Ogg) · AAudio (Android) |
+| **Frontend Framework** | React 19 · TypeScript · Vite 7 |
+| **Styling & Motion** | Tailwind CSS · Framer Motion · Solar Icons |
+| **Media Bridge** | Android MediaSessionCompat · WebKit Bridge · Linux MPRIS / D-Bus |
 
-<br />
+---
 
-## Download
-
-Grab the newest installer from the **[latest release](https://github.com/jupiterbania/Neno-Music-App/releases/latest)**
-for Windows, macOS or Linux.
-
-On Arch and derivatives, install from the AUR instead:
-
-```bash
-yay -S neno     # or: paru -S neno
-```
-
-<br />
-
-## Platform support
-
-- **Windows** — primary target; the most tested of the three.
-- **macOS** — supported; the build is unsigned (see below).
-- **Linux** — supported across major distros; runs on your system's WebKitGTK and GStreamer.
-
-### Linux notes
-
-Install the `.deb` or `.rpm`, or `neno` from the AUR on Arch. All three run on your system's
-WebKitGTK (rendering) and GStreamer (playback) rather than bundling their own.
-
-<details>
-<summary>🔇 No sound, or "YouTube player error 5"</summary>
-
-Most distros don't install the codecs YouTube needs by default:
-
-```bash
-# Debian, Ubuntu, Mint
-sudo apt install gstreamer1.0-libav gstreamer1.0-plugins-base gstreamer1.0-plugins-good
-
-# Fedora (gstreamer1-libav needs RPM Fusion enabled)
-sudo dnf install gstreamer1-libav gstreamer1-plugins-base gstreamer1-plugins-good
-
-# Arch — installed automatically with the AUR package
-sudo pacman -S gst-libav gst-plugins-base gst-plugins-good
-```
-
-Confirm they registered:
-
-```bash
-gst-inspect-1.0 | grep -E 'avdec_aac|avdec_h264'
-```
-
-</details>
-
-<details>
-<summary>⬜ A blank grey window</summary>
-
-A WebKitGTK rendering problem under Wayland, most often on Nvidia. Launch from a terminal
-with one of:
-
-```bash
-WEBKIT_DISABLE_DMABUF_RENDERER=1 neno
-WEBKIT_DISABLE_COMPOSITING_MODE=1 neno
-GDK_BACKEND=x11 neno
-```
-
-Launching from an app menu instead? Add the same variable to the `Exec` line of
-`neno.desktop` (typically `/usr/share/applications/neno.desktop`, or
-`~/.local/share/applications/neno.desktop` for a user install):
-
-```
-Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 neno
-```
-
-</details>
-
-<details>
-<summary>⚠️ An EGL error on launch</summary>
-
-Preload the system Wayland client library:
-
-```bash
-LD_PRELOAD=/usr/lib/libwayland-client.so ~/Downloads/neno*.AppImage
-```
-
-In Gear Lever, add `LD_PRELOAD=/usr/lib/libwayland-client.so` to Neno's environment variables.
-
-</details>
-
-#### 🪵 Anything else
-
-Open **Settings → Library → Application log**, reproduce the problem, and attach the log to
-an issue along with your desktop environment, display server (X11 or Wayland) and distro —
-those three narrow down a Linux bug faster than anything else. The log also lives at
-`~/.local/share/com.neno.desktop/logs/current.log`.
-
-### macOS notes
-
-#### "Apple is not able to verify that it is free from malware"
-
-The macOS builds aren't signed with an Apple Developer ID, so Gatekeeper blocks them on first
-launch. This isn't a malware finding — it means the binary is unsigned. Drag Neno to
-Applications, then either:
-
-- open **System Settings → Privacy & Security**, scroll to the message about Neno, and click
-  **Open Anyway**, or
-- clear the quarantine flag yourself:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Neno.app
-```
-
-Build from source instead if you'd rather not trust a prebuilt, unsigned binary.
-
-#### A Keychain prompt on sign-in
-
-Neno stores one encryption key in its own Keychain entry and encrypts your YouTube Music
-session with it before writing anything to the app data directory. Choose **Always Allow** to
-avoid repeated prompts — or **Deny** if you don't intend to sign in to YouTube Music.
-
-<br />
-
-## For developers
+## 🧑‍💻 Building from Source
 
 ### Prerequisites
+- [Node.js](https://nodejs.org/) (v18 or newer)
+- [Rust](https://rustup.rs/) (stable channel)
+- For Android builds: Android SDK, NDK (27+), and Java 17+
 
-- Node.js LTS and npm
-- [Rust and Cargo](https://rustup.rs/)
-- C++ build tools (MSVC on Windows)
-- Microsoft Edge WebView2 Runtime (Windows)
-
-The Tauri CLI ships in the project's dev dependencies — no global install needed.
-
-### Install, run, build
-
+### 1. Clone the repository
 ```bash
-npm install
-npm run tauri dev
-npm run tauri build
+git clone https://github.com/jupiterbania/Neno-Music-App.git
+cd Neno-Music-App
 ```
 
-### Architecture
+### 2. Install dependencies
+```bash
+npm install
+```
 
-The `docs/` folder documents the codebase:
+### 3. Run development mode
+```bash
+npm run dev
+# Or with Tauri desktop window:
+npm run tauri dev
+```
 
-- [`docs/architecture.md`](docs/architecture.md) — system overview and module map
-- [`docs/frontend.md`](docs/frontend.md) — React structure, styling tokens, icon conventions
-- [`docs/backend.md`](docs/backend.md) — Rust commands and the IPC surface
+### 4. Build release packages
+```bash
+# Build desktop release
+npm run tauri build
 
-### Contributing
+# Build split Android APKs
+npx tauri android build --apk --split-per-abi
+```
 
-Contributions are welcome. Fork the repo, branch, test locally, and open a pull request
-describing what changed and why. For larger changes, open an issue first so the approach can
-be discussed.
+---
 
-By contributing you agree to the [Contributor License Agreement](CLA.md).
+## 🛡️ License
 
-<br />
+This project is licensed under the **Apache License, Version 2.0**. See the [LICENSE](LICENSE) file for complete terms.
 
-## Credits
+```
+Copyright 2026 Neno Music App Contributors
 
-Neno is a fork of **[JustAnotherMusicClient](https://github.com/2latemc/JustAnotherMusicClient)**
-by [2latemc](https://github.com/2latemc), used under the Apache 2.0 licence. The original
-project did the hard groundwork of getting YouTube Music working on the desktop.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-If you want to support the original author, they accept donations
-[on Ko-fi](https://ko-fi.com/totally2late).
+    http://www.apache.org/licenses/LICENSE-2.0
 
-<br />
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
 
-## Legal
+---
 
-**Neno provides no downloading functionality.** It is a client for audio listening, with
-theming and interface additions.
-
-Neno interacts with YouTube and YouTube Music. Access to those services remains governed by
-their own terms, policies, availability and regional restrictions.
-
-Neno does not host or claim ownership of music, videos, artwork, metadata, or any other
-content supplied by third parties. Rights in that content remain with their respective
-owners.
-
-The project is not intended to circumvent access controls, geographic restrictions,
-advertising, paid service requirements, or content licensing, nor to enable unauthorised
-downloading, copying, redistribution or public performance of third-party content.
-
-YouTube and YouTube Music are trademarks of Google LLC. All other trademarks are the property
-of their respective owners. References to third-party products describe compatibility and
-integration only.
-
-- [YouTube Terms of Service](https://www.youtube.com/static?template=terms)
-- [YouTube API Services Terms of Service](https://developers.google.com/youtube/terms/api-services-terms-of-service)
-- [YouTube API Services Developer Policies](https://developers.google.com/youtube/terms/developer-policies)
-
-## Thanks to our contributors
-
-<a href="https://github.com/jupiterbania/Neno-Music-App/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=jupiterbania/Neno-Music-App" />
-</a>
+<p align="center">
+  Made with ❤️ for music lovers everywhere.
+</p>

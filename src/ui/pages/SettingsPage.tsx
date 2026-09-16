@@ -1471,7 +1471,7 @@ export function SettingsPage({
                     Installed version: {
                       installedVersion
                         ? installedVersion === "Unknown" ? installedVersion : `v${installedVersion}`
-                        : "v1.4.0"
+                        : "v1.0.0"
                     }
                   </span>
                 </div>
