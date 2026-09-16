@@ -43,11 +43,11 @@ export function MobileHeader({
       {/* Brand Identity */}
       <div className="flex items-center gap-2">
         <div className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-card border border-border/40 shadow-xs">
-          <img src={appIcon} alt="Zuno" className="size-5 object-contain" />
+          <img src={appIcon} alt="Neno" className="size-5 object-contain" />
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-extrabold tracking-tight text-foreground leading-none">
-            Zuno
+            Neno
           </span>
           <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary tracking-wide uppercase">
             Music

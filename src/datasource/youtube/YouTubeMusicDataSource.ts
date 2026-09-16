@@ -2957,7 +2957,9 @@ export class YouTubeMusicDataSource extends DataSource {
     try {
       this.musicCookie = await invoke<string | null>("load_youtube_music_cookie");
       if (!this.musicCookie) {
-        const backupCookie = await getAppSetting<string>("zuno:youtube-music-cookie-backup");
+        const backupCookie =
+          (await getAppSetting<string>("neno:youtube-music-cookie-backup")) ||
+          (await getAppSetting<string>("zuno:youtube-music-cookie-backup"));
         if (backupCookie && typeof backupCookie === "string") {
           logInternalInfo("YouTubeMusicDataSource.restoreSession recovered from backup setting");
           this.musicCookie = backupCookie;
@@ -2968,7 +2970,7 @@ export class YouTubeMusicDataSource extends DataSource {
         logInternalInfo("YouTubeMusicDataSource.restoreSession no stored session");
         return false;
       }
-      void setAppSetting("zuno:youtube-music-cookie-backup", this.musicCookie).catch(() => {});
+      void setAppSetting("neno:youtube-music-cookie-backup", this.musicCookie).catch(() => {});
       logInternalInfo("YouTubeMusicDataSource.restoreSession credential loaded", {
         credentialBytes: this.musicCookie.length,
       });
@@ -3006,7 +3008,7 @@ export class YouTubeMusicDataSource extends DataSource {
       }
 
       this.musicCookie = cookie;
-      void setAppSetting("zuno:youtube-music-cookie-backup", cookie).catch(() => {});
+      void setAppSetting("neno:youtube-music-cookie-backup", cookie).catch(() => {});
       // Only the clients are rebuilt: this is the same person on the same channel.
       this.resetMusicClients();
       logInternalInfo("YouTubeMusicDataSource.refreshSession success", {
@@ -3038,6 +3040,8 @@ export class YouTubeMusicDataSource extends DataSource {
     onStage?.("browser");
     let signInResult: SignInResult;
     const win = typeof window !== "undefined" ? (window as unknown as {
+      __neno_on_google_signin?: (cookie: string) => void;
+      __neno_on_google_signin_cancelled?: () => void;
       __zuno_on_google_signin?: (cookie: string) => void;
       __zuno_on_google_signin_cancelled?: () => void;
       AndroidMediaBridge?: {
@@ -3054,10 +3058,12 @@ export class YouTubeMusicDataSource extends DataSource {
           return;
         }
         const cleanup = () => {
+          delete win.__neno_on_google_signin;
+          delete win.__neno_on_google_signin_cancelled;
           delete win.__zuno_on_google_signin;
           delete win.__zuno_on_google_signin_cancelled;
         };
-        win.__zuno_on_google_signin = async (cookie: string) => {
+        const handleSignInSuccess = async (cookie: string) => {
           cleanup();
           try {
             logInternalInfo("YouTubeMusicDataSource.signIn received cookie from AndroidMediaBridge", {
@@ -3069,10 +3075,14 @@ export class YouTubeMusicDataSource extends DataSource {
             reject(err);
           }
         };
-        win.__zuno_on_google_signin_cancelled = () => {
+        const handleSignInCancelled = () => {
           cleanup();
           reject(new Error("YouTube Music sign-in was cancelled by user"));
         };
+        win.__neno_on_google_signin = handleSignInSuccess;
+        win.__zuno_on_google_signin = handleSignInSuccess;
+        win.__neno_on_google_signin_cancelled = handleSignInCancelled;
+        win.__zuno_on_google_signin_cancelled = handleSignInCancelled;
         if (win.AndroidMediaBridge?.signInGoogle) {
           win.AndroidMediaBridge.signInGoogle();
         } else {
@@ -5064,7 +5074,7 @@ export class YouTubeMusicDataSource extends DataSource {
   private getLyricsRequestHeaders(): Record<string, string> {
     return {
       Accept: "application/json",
-      "User-Agent": "Zuno/1.0",
+      "User-Agent": "Neno/1.0",
     };
   }
 

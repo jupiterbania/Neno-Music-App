@@ -64,7 +64,7 @@ export function ReleaseNoteDialog({ version, onDismiss }: ReleaseNoteDialogProps
               Updated
             </span>
             <h2 id="release-note-title" className="mt-1 text-xl font-bold tracking-tight">
-              Zuno {version}
+              Neno {version}
             </h2>
 
             {/* `whitespace-pre-line` so the note stays plain text: it is edited per release,

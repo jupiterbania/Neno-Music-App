@@ -1,4 +1,4 @@
-package com.zuno.desktop
+package com.neno.desktop
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -31,15 +31,15 @@ import java.util.concurrent.Executors
 class MediaPlaybackService : Service() {
 
     companion object {
-        const val CHANNEL_ID = "zuno_playback_channel"
+        const val CHANNEL_ID = "neno_playback_channel"
         const val NOTIFICATION_ID = 1001
 
-        const val ACTION_PLAY = "com.zuno.desktop.ACTION_PLAY"
-        const val ACTION_PAUSE = "com.zuno.desktop.ACTION_PAUSE"
-        const val ACTION_NEXT = "com.zuno.desktop.ACTION_NEXT"
-        const val ACTION_PREV = "com.zuno.desktop.ACTION_PREV"
-        const val ACTION_STOP = "com.zuno.desktop.ACTION_STOP"
-        const val ACTION_UPDATE = "com.zuno.desktop.ACTION_UPDATE"
+        const val ACTION_PLAY = "com.neno.desktop.ACTION_PLAY"
+        const val ACTION_PAUSE = "com.neno.desktop.ACTION_PAUSE"
+        const val ACTION_NEXT = "com.neno.desktop.ACTION_NEXT"
+        const val ACTION_PREV = "com.neno.desktop.ACTION_PREV"
+        const val ACTION_STOP = "com.neno.desktop.ACTION_STOP"
+        const val ACTION_UPDATE = "com.neno.desktop.ACTION_UPDATE"
 
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_ARTIST = "extra_artist"
@@ -161,7 +161,7 @@ class MediaPlaybackService : Service() {
     private var telephonyManager: TelephonyManager? = null
     private var isNoisyReceiverRegistered: Boolean = false
 
-    private var currentTitle: String = "Zuno"
+    private var currentTitle: String = "Neno"
     private var currentArtist: String = "Playing"
     private var isPlaying: Boolean = true
     private var currentArtworkUrl: String? = null
@@ -267,7 +267,7 @@ class MediaPlaybackService : Service() {
         acquireWakeLock()
         registerNoisyReceiver()
         MainActivity.instance?.dispatchMediaControl("play")
-        sendBroadcast(Intent("com.zuno.desktop.MEDIA_CONTROL").putExtra("command", "play"))
+        sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "play"))
         updateNotification()
     }
 
@@ -277,13 +277,13 @@ class MediaPlaybackService : Service() {
         releaseWakeLock()
         unregisterNoisyReceiver()
         MainActivity.instance?.dispatchMediaControl("pause")
-        sendBroadcast(Intent("com.zuno.desktop.MEDIA_CONTROL").putExtra("command", "pause"))
+        sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "pause"))
         updateNotification()
     }
 
     private fun initMediaSession() {
         try {
-            mediaSession = MediaSessionCompat(this, "ZunoMediaSession").apply {
+            mediaSession = MediaSessionCompat(this, "NenoMediaSession").apply {
                 isActive = true
                 setCallback(object : MediaSessionCompat.Callback() {
                     override fun onPlay() {
@@ -297,12 +297,12 @@ class MediaPlaybackService : Service() {
 
                     override fun onSkipToNext() {
                         MainActivity.instance?.dispatchMediaControl("next")
-                        sendBroadcast(Intent("com.zuno.desktop.MEDIA_CONTROL").putExtra("command", "next"))
+                        sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "next"))
                     }
 
                     override fun onSkipToPrevious() {
                         MainActivity.instance?.dispatchMediaControl("prev")
-                        sendBroadcast(Intent("com.zuno.desktop.MEDIA_CONTROL").putExtra("command", "prev"))
+                        sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "prev"))
                     }
 
                     override fun onSeekTo(pos: Long) {
@@ -342,14 +342,14 @@ class MediaPlaybackService : Service() {
             }
             ACTION_NEXT -> {
                 MainActivity.instance?.dispatchMediaControl("next")
-                sendBroadcast(Intent("com.zuno.desktop.MEDIA_CONTROL").putExtra("command", "next"))
+                sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "next"))
             }
             ACTION_PREV -> {
                 MainActivity.instance?.dispatchMediaControl("prev")
-                sendBroadcast(Intent("com.zuno.desktop.MEDIA_CONTROL").putExtra("command", "prev"))
+                sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "prev"))
             }
             ACTION_UPDATE -> {
-                currentTitle = intent.getStringExtra(EXTRA_TITLE) ?: "Zuno"
+                currentTitle = intent.getStringExtra(EXTRA_TITLE) ?: "Neno"
                 currentArtist = intent.getStringExtra(EXTRA_ARTIST) ?: "Playing"
                 val newIsPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, true)
                 durationSec = intent.getLongExtra(EXTRA_DURATION_SEC, 0L)
@@ -411,7 +411,7 @@ class MediaPlaybackService : Service() {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = powerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
-                "Zuno:AudioPlaybackWakeLock"
+                "Neno:AudioPlaybackWakeLock"
             ).apply {
                 setReferenceCounted(false)
             }
@@ -438,7 +438,7 @@ class MediaPlaybackService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Zuno Music Playback",
+                "Neno Music Playback",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Controls and status for music playback"
@@ -472,7 +472,7 @@ class MediaPlaybackService : Service() {
             val metaBuilder = MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTitle)
                 .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
-                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "Zuno Music")
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "Neno Music")
                 .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationSec * 1000L)
 
             currentArtworkBitmap?.let {
@@ -512,7 +512,7 @@ class MediaPlaybackService : Service() {
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(currentTitle)
             .setContentText(currentArtist)
-            .setSubText("Zuno Music")
+            .setSubText("Neno Music")
             .setContentIntent(contentPendingIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(isPlaying)

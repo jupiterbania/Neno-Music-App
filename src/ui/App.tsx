@@ -749,11 +749,12 @@ export default function App() {
   };
 
   useEffect(() => {
-    (window as unknown as { __zuno_handle_android_back?: () => boolean }).__zuno_handle_android_back = () => {
-      return backHandlerRef.current();
-    };
+    const win = window as unknown as { __neno_handle_android_back?: () => boolean; __zuno_handle_android_back?: () => boolean };
+    win.__neno_handle_android_back = () => backHandlerRef.current();
+    win.__zuno_handle_android_back = () => backHandlerRef.current();
     return () => {
-      delete (window as unknown as { __zuno_handle_android_back?: () => boolean }).__zuno_handle_android_back;
+      delete win.__neno_handle_android_back;
+      delete win.__zuno_handle_android_back;
     };
   }, []);
 
@@ -1180,7 +1181,7 @@ export default function App() {
 
     if (looksLikeYouTubeLink(query)) {
       void handleOpenLink(query, openInNewTab).then((opened) => {
-        // Not a link Zuno can open after all — fall back to searching for the text, so a
+        // Not a link Neno can open after all — fall back to searching for the text, so a
         // paste that resolves to nothing still does something.
         if (!opened) runSearch(query, openInNewTab);
       });

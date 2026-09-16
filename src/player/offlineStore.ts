@@ -6,8 +6,10 @@ import { logInternalError, logInternalInfo, logInternalWarn } from "../internal/
 import { getAppSetting, setAppSetting } from "../internal/appSettings";
 import { getDownloadQuality, type AudioQuality } from "../internal/audioQuality";
 
-const MANIFEST_KEY = "zuno.offline-manifest.v1";
-const MAX_BYTES_KEY = "zuno.offline-max-bytes.v1";
+const MANIFEST_KEY = "neno.offline-manifest.v1";
+const LEGACY_MANIFEST_KEY = "zuno.offline-manifest.v1";
+const MAX_BYTES_KEY = "neno.offline-max-bytes.v1";
+const LEGACY_MAX_BYTES_KEY = "zuno.offline-max-bytes.v1";
 
 /** Default ceiling for downloaded audio. Roughly 1,500 songs at typical bitrates. */
 export const DEFAULT_OFFLINE_MAX_BYTES = 8 * 1024 * 1024 * 1024;
@@ -73,7 +75,8 @@ function asManifest(parsed: unknown): Record<string, OfflineEntry> | null {
 
 function readManifest(): Record<string, OfflineEntry> {
   try {
-    return asManifest(JSON.parse(localStorage.getItem(MANIFEST_KEY) ?? "{}")) ?? {};
+    const raw = localStorage.getItem(MANIFEST_KEY) ?? localStorage.getItem(LEGACY_MANIFEST_KEY);
+    return asManifest(JSON.parse(raw ?? "{}")) ?? {};
   } catch {
     // A corrupt manifest is rebuilt from disk by reconcile() below.
     return {};
@@ -89,7 +92,9 @@ function readManifest(): Record<string, OfflineEntry> {
  * enough home for that on its own.
  */
 async function readDurableManifest(): Promise<Record<string, OfflineEntry>> {
-  return asManifest(await getAppSetting<unknown>(MANIFEST_KEY)) ?? {};
+  const fromNeno = await getAppSetting<unknown>(MANIFEST_KEY);
+  if (fromNeno) return asManifest(fromNeno) ?? {};
+  return asManifest(await getAppSetting<unknown>(LEGACY_MANIFEST_KEY)) ?? {};
 }
 
 function writeManifest(entries: Record<string, OfflineEntry>): void {
@@ -117,7 +122,7 @@ function commitEntries(entries: Record<string, OfflineEntry>): void {
 }
 
 export function getOfflineMaxBytes(): number {
-  const raw = Number(localStorage.getItem(MAX_BYTES_KEY));
+  const raw = Number(localStorage.getItem(MAX_BYTES_KEY) ?? localStorage.getItem(LEGACY_MAX_BYTES_KEY));
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_OFFLINE_MAX_BYTES;
 }
 

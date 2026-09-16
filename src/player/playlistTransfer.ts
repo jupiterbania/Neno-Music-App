@@ -17,7 +17,7 @@ interface ExportedTrack {
 }
 
 interface ExportedPlaylist {
-  format: "zuno-playlist";
+  format: "neno-playlist" | "zuno-playlist";
   version: number;
   title: string;
   owner?: string;
@@ -59,9 +59,9 @@ export async function exportPlaylist(
 ): Promise<{ path: string; format: "json" | "m3u"; written: number } | null> {
   const path = await saveDialog({
     title: `Export ${playlist.title}`,
-    defaultPath: `${sanitizeFileName(playlist.title)}.zuno.json`,
+    defaultPath: `${sanitizeFileName(playlist.title)}.neno.json`,
     filters: [
-      { name: "Zuno playlist", extensions: ["json"] },
+      { name: "Neno playlist", extensions: ["json"] },
       { name: "M3U playlist", extensions: ["m3u", "m3u8"] },
     ],
   });
@@ -87,7 +87,7 @@ export async function exportPlaylist(
   }
 
   const payload: ExportedPlaylist = {
-    format: "zuno-playlist",
+    format: "neno-playlist",
     version: FORMAT_VERSION,
     title: playlist.title,
     owner: playlist.owner,
@@ -117,7 +117,7 @@ function parseZunoJson(contents: string): ImportedPlaylist | null {
   if (!parsed || typeof parsed !== "object") return null;
 
   const candidate = parsed as Partial<ExportedPlaylist>;
-  if (candidate.format !== "zuno-playlist" || !Array.isArray(candidate.tracks)) return null;
+  if ((candidate.format !== "neno-playlist" && candidate.format !== "zuno-playlist") || !Array.isArray(candidate.tracks)) return null;
 
   const tracks: Track[] = candidate.tracks
     .filter((entry): entry is ExportedTrack => Boolean(entry?.id))
@@ -193,7 +193,7 @@ export async function importPlaylistFile(): Promise<ImportedPlaylist | null> {
 
   const contents = await invoke<string>("read_text_file", { path });
   const fileName = path.split(/[\\/]/).pop() ?? "Imported playlist";
-  const baseTitle = fileName.replace(/\.(zuno\.)?(json|m3u8?)$/i, "");
+  const baseTitle = fileName.replace(/\.(neno\.|zuno\.)?(json|m3u8?)$/i, "");
 
   if (/\.m3u8?$/i.test(path)) {
     return parseM3u(contents, baseTitle);
@@ -204,7 +204,7 @@ export async function importPlaylistFile(): Promise<ImportedPlaylist | null> {
     if (!parsed) throw new Error("unrecognised");
     return parsed;
   } catch {
-    throw new Error("That file is not a Zuno playlist export.");
+    throw new Error("That file is not a Neno playlist export.");
   }
 }
 

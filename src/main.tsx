@@ -122,7 +122,7 @@ window.addEventListener("unhandledrejection", (event) => {
  */
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <ErrorBoundary label="Zuno">
+    <ErrorBoundary label="Neno">
       <App />
     </ErrorBoundary>
   </React.StrictMode>,

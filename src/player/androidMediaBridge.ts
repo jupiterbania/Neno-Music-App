@@ -22,9 +22,9 @@ import {
 import { useEffect, useRef } from "react";
 
 // Action strings mirrored from MediaPlaybackService.kt companion object
-const ACTION_UPDATE = "com.zuno.desktop.ACTION_UPDATE";
-const ACTION_STOP = "com.zuno.desktop.ACTION_STOP";
-const BROADCAST_EVENT = "com.zuno.desktop.MEDIA_CONTROL";
+const ACTION_UPDATE = "com.neno.desktop.ACTION_UPDATE";
+const ACTION_STOP = "com.neno.desktop.ACTION_STOP";
+const BROADCAST_EVENT = "com.neno.desktop.MEDIA_CONTROL";
 
 interface AndroidMediaBridgeInterface {
   updateMedia(
@@ -66,7 +66,7 @@ async function sendServiceAction(
     try {
       if (action === ACTION_UPDATE) {
         bridge.updateMedia(
-          String(payload?.title ?? "Zuno"),
+          String(payload?.title ?? "Neno"),
           String(payload?.artist ?? "Playing"),
           Boolean(payload?.isPlaying ?? true),
           payload?.artworkUrl ? String(payload.artworkUrl) : null,
@@ -246,6 +246,7 @@ export function useAndroidMediaBridge(): void {
     };
 
     // 1. Direct window callback
+    (window as unknown as { __neno_media_command?: (cmd: string) => void; __zuno_media_command?: (cmd: string) => void }).__neno_media_command = handleCommand;
     (window as unknown as { __zuno_media_command?: (cmd: string) => void }).__zuno_media_command = handleCommand;
 
     // 2. CustomEvent on window
@@ -269,6 +270,7 @@ export function useAndroidMediaBridge(): void {
     }
 
     return () => {
+      delete (window as unknown as { __neno_media_command?: unknown }).__neno_media_command;
       delete (window as unknown as { __zuno_media_command?: unknown }).__zuno_media_command;
       window.removeEventListener(BROADCAST_EVENT, customEventListener);
       void unlistenPromise?.then((fn) => fn());

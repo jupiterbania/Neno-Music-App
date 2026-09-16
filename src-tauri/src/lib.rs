@@ -1651,15 +1651,15 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 
-    let show = MenuItem::with_id(app, "tray-show", "Show Zuno", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "tray-quit", "Quit Zuno", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "tray-show", "Show Neno", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "tray-quit", "Quit Neno", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
 
     TrayIconBuilder::with_id("main-tray")
         .icon(app.default_window_icon().cloned().ok_or_else(|| {
             tauri::Error::AssetNotFound("default window icon".to_string())
         })?)
-        .tooltip("Zuno")
+        .tooltip("Neno")
         .menu(&menu)
         // The menu is for the right-click; a left click should just bring the window back.
         .show_menu_on_left_click(false)
@@ -5422,6 +5422,23 @@ pub fn ensure_android_context_initialized(
         eprintln!("[internal][tauri][info] ndk_context successfully initialized");
     } else {
         eprintln!("[internal][tauri][info] ndk_context already initialized, skipping");
+    }
+}
+
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "C" fn Java_com_neno_desktop_MainActivity_initAndroidContext(
+    mut env: jni::JNIEnv,
+    _class: jni::objects::JClass,
+    context: jni::objects::JObject,
+) {
+    if let Ok(vm) = env.get_java_vm() {
+        let vm_ptr = vm.get_java_vm_pointer() as *mut std::ffi::c_void;
+        if let Ok(global_context) = env.new_global_ref(context) {
+            let context_ptr = global_context.as_raw() as *mut std::ffi::c_void;
+            std::mem::forget(global_context);
+            ensure_android_context_initialized(vm_ptr, context_ptr);
+        }
     }
 }
 

@@ -1451,7 +1451,7 @@ export function SettingsPage({
 
           <section className={SETTINGS_CARD} aria-labelledby="about-settings-title">
             <SettingsCardHeader
-              title="About Zuno"
+              title="About Neno"
               titleId="about-settings-title"
               icon={<SettingsIcon size={18} aria-hidden="true" />}
               description="App details, updates, and community links."
@@ -1462,7 +1462,7 @@ export function SettingsPage({
               <div className="flex items-center justify-between gap-3 rounded-xl bg-card/40 border border-border/40 p-3.5 sm:p-4">
                 <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-foreground">Zuno Music</span>
+                    <span className="text-sm font-bold text-foreground">Neno Music</span>
                     <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">
                       {isAndroid ? "Android" : isMobile ? "Mobile" : "Desktop"}
                     </span>
@@ -1501,7 +1501,7 @@ export function SettingsPage({
                         : `Preparing version ${updateResult.version}...`
                       : isAndroid
                         ? "A new APK release is available. Tap below to download the latest update."
-                        : "A new version of Zuno is available to install."}
+                        : "A new version of Neno is available to install."}
                   </p>
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     {updateResult.canInstall && (
@@ -1987,12 +1987,12 @@ export function SettingsPage({
                 title="System"
                 titleId="library-system-title"
                 icon={<SettingsIcon size={18} aria-hidden="true" />}
-                description="How Zuno behaves outside the window."
+                description="How Neno behaves outside the window."
               />
 
               <SettingToggle
                 title="Launch at startup"
-                description="Start Zuno when your computer starts."
+                description="Start Neno when your computer starts."
                 checked={autostartEnabled}
                 disabled={autostartLoading}
                 onCheckedChange={(checked) => void handleAutostartChange(checked)}
@@ -2003,7 +2003,7 @@ export function SettingsPage({
 
               <SettingToggle
                 title="Minimize to tray"
-                description="Closing the window hides Zuno to the system tray and keeps playing. Quit from the tray icon."
+                description="Closing the window hides Neno to the system tray and keeps playing. Quit from the tray icon."
                 checked={minimizeToTray}
                 onCheckedChange={setMinimizeToTray}
               />
@@ -2310,7 +2310,7 @@ export function SettingsPage({
                 audioEngineMode === "rust"
                   ? "Decoded directly in Rust. Lowest memory, gapless and crossfade support."
                   : audioEngineMode === "native"
-                  ? "Zuno plays each track itself. About 90 MB lighter, slower to start, no gapless or crossfade."
+                  ? "Neno plays each track itself. About 90 MB lighter, slower to start, no gapless or crossfade."
                   : "A hidden YouTube frame plays each track. Costs about 90 MB, starts faster, required for gapless and crossfade."
               }
             >
@@ -2423,7 +2423,7 @@ export function SettingsPage({
               title="Session"
               titleId="session-settings-title"
               icon={<QueuePanelIcon size={18} aria-hidden="true" />}
-              description="What comes back when you reopen Zuno."
+              description="What comes back when you reopen Neno."
             />
 
             <SettingToggle

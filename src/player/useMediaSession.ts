@@ -246,7 +246,7 @@ export function useMediaSession(
         ? new MediaMetadata({
             title: track.title,
             artist: track.artist,
-            album: track.album || "Zuno Music",
+            album: track.album || "Neno Music",
             artwork: track.artworkUrl
               ? [
                   { src: track.artworkUrl, sizes: "96x96", type: "image/jpeg" },

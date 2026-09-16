@@ -9,6 +9,8 @@
 -keepclassmembers class app.tauri.** { *; }
 
 # Keep the main Activity and anything annotated for JS interop
+-keep class com.neno.desktop.** { *; }
+-keepclassmembers class com.neno.desktop.** { *; }
 -keep class com.zuno.desktop.** { *; }
 -keepclassmembers class com.zuno.desktop.** { *; }
 

@@ -1,4 +1,4 @@
-package com.zuno.desktop
+package com.neno.desktop
 
 import android.os.Bundle
 import android.view.View
@@ -12,9 +12,13 @@ class MainActivity : TauriActivity() {
     companion object {
         init {
             try {
-                System.loadLibrary("zuno_lib")
+                System.loadLibrary("neno_lib")
             } catch (e: Throwable) {
-                e.printStackTrace()
+                try {
+                    System.loadLibrary("zuno_lib")
+                } catch (e2: Throwable) {
+                    e2.printStackTrace()
+                }
             }
         }
 
@@ -44,7 +48,7 @@ class MainActivity : TauriActivity() {
                 val webView = targetWebView
                 if (webView != null) {
                     webView.evaluateJavascript(
-                        "(function() { if (typeof window.__zuno_handle_android_back === 'function') { return window.__zuno_handle_android_back(); } return false; })()"
+                        "(function() { if (typeof window.__neno_handle_android_back === 'function') { return window.__neno_handle_android_back(); } if (typeof window.__zuno_handle_android_back === 'function') { return window.__zuno_handle_android_back(); } return false; })()"
                     ) { result ->
                         if (result != "true") {
                             moveTaskToBack(true)
@@ -100,7 +104,7 @@ class MainActivity : TauriActivity() {
         val webView = targetWebView
         if (webView != null) {
             webView.evaluateJavascript(
-                "(function() { if (typeof window.__zuno_handle_android_back === 'function') { return window.__zuno_handle_android_back(); } return false; })()"
+                "(function() { if (typeof window.__neno_handle_android_back === 'function') { return window.__neno_handle_android_back(); } if (typeof window.__zuno_handle_android_back === 'function') { return window.__zuno_handle_android_back(); } return false; })()"
             ) { result ->
                 if (result != "true") {
                     moveTaskToBack(true)
@@ -147,7 +151,7 @@ class MainActivity : TauriActivity() {
     fun dispatchMediaControl(command: String) {
         runOnUiThread {
             targetWebView?.evaluateJavascript(
-                "if (window.__zuno_media_command) { window.__zuno_media_command('$command'); } else { window.dispatchEvent(new CustomEvent('com.zuno.desktop.MEDIA_CONTROL', { detail: { command: '$command' } })); }",
+                "if (window.__neno_media_command) { window.__neno_media_command('$command'); } else if (window.__zuno_media_command) { window.__zuno_media_command('$command'); } else { window.dispatchEvent(new CustomEvent('com.neno.desktop.MEDIA_CONTROL', { detail: { command: '$command' } })); }",
                 null
             )
         }
@@ -164,7 +168,10 @@ class MainActivity : TauriActivity() {
                 }
             }
         }
-        val filter = android.content.IntentFilter("com.zuno.desktop.MEDIA_CONTROL")
+        val filter = android.content.IntentFilter().apply {
+            addAction("com.neno.desktop.MEDIA_CONTROL")
+            addAction("com.zuno.desktop.MEDIA_CONTROL")
+        }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(mediaControlReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -377,7 +384,7 @@ class MainActivity : TauriActivity() {
                     // Small delay to ensure all session cookie writes are fully flushed before closing
                     loginWebView.postDelayed({
                         targetWebView?.post {
-                            targetWebView?.evaluateJavascript("if (window.__zuno_on_google_signin) { window.__zuno_on_google_signin($quoted); }", null)
+                            targetWebView?.evaluateJavascript("if (window.__neno_on_google_signin) { window.__neno_on_google_signin($quoted); } else if (window.__zuno_on_google_signin) { window.__zuno_on_google_signin($quoted); }", null)
                         }
                         dialog.dismiss()
                     }, 600)
@@ -427,7 +434,7 @@ class MainActivity : TauriActivity() {
                     currentSignInDialog = null
                 }
                 if (!signedIn) {
-                    targetWebView?.evaluateJavascript("if (window.__zuno_on_google_signin_cancelled) { window.__zuno_on_google_signin_cancelled(); }", null)
+                    targetWebView?.evaluateJavascript("if (window.__neno_on_google_signin_cancelled) { window.__neno_on_google_signin_cancelled(); } else if (window.__zuno_on_google_signin_cancelled) { window.__zuno_on_google_signin_cancelled(); }", null)
                 }
             }
 

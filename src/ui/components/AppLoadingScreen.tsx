@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 /* import appIcon from "../../../assets/img/Logo.png";
- */import introVideo from "../../../assets/img/zuno.mp4";
+ */import introVideo from "../../../assets/img/neno.mp4";
 
 /*
  * The accent bloom, as a gradient rather than a blurred circle.

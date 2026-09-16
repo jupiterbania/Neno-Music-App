@@ -3,7 +3,8 @@ import type { Track } from "../datasource/types";
 import { logInternalWarn } from "../internal/logging";
 import { getAppSetting, setAppSetting } from "../internal/appSettings";
 
-const STORAGE_KEY = "zuno.play-history.v1";
+const STORAGE_KEY = "neno.play-history.v1";
+const LEGACY_STORAGE_KEY = "zuno.play-history.v1";
 
 /** Roughly a month of heavy listening. Trimmed oldest-first. */
 const MAX_ENTRIES = 500;
@@ -36,7 +37,7 @@ function normalize(parsed: unknown): PlayHistoryEntry[] | null {
 
 function read(): PlayHistoryEntry[] {
   if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
   if (raw === cachedRaw) return cached;
 
   cachedRaw = raw;
@@ -61,7 +62,10 @@ function read(): PlayHistoryEntry[] {
  * outside the webview, where a cleared profile cannot reach it.
  */
 export async function hydratePlayHistory(): Promise<void> {
-  const stored = normalize(await getAppSetting<unknown>(STORAGE_KEY));
+  let stored = normalize(await getAppSetting<unknown>(STORAGE_KEY));
+  if (!stored || stored.length === 0) {
+    stored = normalize(await getAppSetting<unknown>(LEGACY_STORAGE_KEY));
+  }
   if (stored && stored.length > 0) {
     // Through write(), so the mirror is refreshed and anything already rendered is told.
     write(stored);
