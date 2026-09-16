@@ -5553,6 +5553,30 @@ export class YouTubeMusicDataSource extends DataSource {
     }
   }
 
+  async getSearchHistory(): Promise<string[]> {
+    try {
+      const client = await this.getMusicClient();
+      const sections = await client.music.getSearchSuggestions("");
+      const historyItems: string[] = [];
+      for (const section of sections) {
+        if (!section.contents) continue;
+        for (const item of section.contents) {
+          const suggestionObj = item as any;
+          const text = suggestionObj.suggestion?.toString()?.trim();
+          if (text) {
+            historyItems.push(text);
+          }
+        }
+      }
+      return [...new Set(historyItems)];
+    } catch (error) {
+      logInternalWarn("YouTubeMusicDataSource.getSearchHistory failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  }
+
   async getRecommendations(
     seed: Track,
     onUpdate?: (tracks: Track[]) => void,

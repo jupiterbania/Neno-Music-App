@@ -33,3 +33,25 @@ export async function hydrateLastFmSettings() {
 export function useLastFmScrobblingEnabled() {
   return useSyncExternalStore(subscribe, readLastFmScrobblingEnabled, () => true);
 }
+
+const USERNAME_KEY = "lastfm-session-username";
+
+export function readCachedLastFmUsername(): string | null {
+  try {
+    return localStorage.getItem(USERNAME_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedLastFmUsername(username: string | null): void {
+  try {
+    if (username) {
+      localStorage.setItem(USERNAME_KEY, username);
+    } else {
+      localStorage.removeItem(USERNAME_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}

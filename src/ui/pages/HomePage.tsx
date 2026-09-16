@@ -143,6 +143,21 @@ function uniqueTracks(tracks: readonly Track[]): Track[] {
   return [...new Map(tracks.map((track) => [track.id, track])).values()];
 }
 
+function isListenAgainTitle(title: string): boolean {
+  const t = title.toLowerCase().trim();
+  return t.includes("listen again") || t.includes("फिर से सुनें");
+}
+
+function isQuickPicksTitle(title: string): boolean {
+  const t = title.toLowerCase().trim();
+  return (
+    t.includes("quick pick") ||
+    t.includes("quick picks") ||
+    t.includes("त्वरित चयन") ||
+    t.includes("क्विक पिक्स")
+  );
+}
+
 export function HomePage({
   tabId,
   playerController,
@@ -212,12 +227,33 @@ export function HomePage({
     () =>
       showYtmHomeFeed &&
       Boolean(
-        ytmHomeFeed?.shelves.some((shelf) =>
-          shelf.title.toLocaleLowerCase().includes("listen again"),
-        ),
+        ytmHomeFeed?.shelves.some((shelf) => isListenAgainTitle(shelf.title)),
       ),
     [showYtmHomeFeed, ytmHomeFeed],
   );
+
+  /**
+   * Reorders YouTube Music shelves so that "Quick picks" is positioned where "Listen again"
+   * was, and "Listen again" takes "Quick picks"'s place (swapping their positions).
+   */
+  const orderedShelves = useMemo(() => {
+    if (!ytmHomeFeed?.shelves || ytmHomeFeed.shelves.length === 0) {
+      return [];
+    }
+    const shelves = [...ytmHomeFeed.shelves];
+    const listenAgainIdx = shelves.findIndex((shelf) => isListenAgainTitle(shelf.title));
+    const quickPicksIdx = shelves.findIndex((shelf) => isQuickPicksTitle(shelf.title));
+
+    if (listenAgainIdx !== -1 && quickPicksIdx !== -1) {
+      const temp = shelves[listenAgainIdx];
+      shelves[listenAgainIdx] = shelves[quickPicksIdx];
+      shelves[quickPicksIdx] = temp;
+    } else if (quickPicksIdx > 0 && listenAgainIdx === -1) {
+      const [quickShelf] = shelves.splice(quickPicksIdx, 1);
+      shelves.unshift(quickShelf);
+    }
+    return shelves;
+  }, [ytmHomeFeed]);
 
   useEffect(() => {
     if (!showYtmHomeFeed) return;
@@ -568,9 +604,9 @@ export function HomePage({
               <AlbumGridSkeleton count={12} label="Loading your feed" />
             </section>
           )}
-          {ytmHomeFeed && ytmHomeFeed.shelves.length > 0 && (
+          {orderedShelves.length > 0 && (
             <BrowseShelves
-              shelves={ytmHomeFeed.shelves}
+              shelves={orderedShelves}
               playerController={playerController}
               onOpenAlbum={onOpenAlbum ?? (() => {})}
               onOpenArtist={onOpenArtist ?? (() => {})}

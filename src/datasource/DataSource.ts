@@ -60,6 +60,8 @@ export abstract class DataSource {
   resolveLink?(url: string): Promise<ResolvedLink | null>;
   searchTracks?(query: string, onUpdate?: (tracks: Track[]) => void): Promise<Track[]>;
   getSearchSuggestions?(query: string, onUpdate?: (suggestions: string[]) => void): Promise<string[]>;
+  /** Fetches recent search history from the provider (e.g. YouTube Music authenticated session). */
+  getSearchHistory?(onUpdate?: (queries: string[]) => void): Promise<string[]>;
   getStreamData?(track: Track): Promise<StreamData>;
   /**
    * Pre-pays whatever first-play latency can be paid before there is a play — e.g. warming a

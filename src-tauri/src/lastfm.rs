@@ -1,11 +1,15 @@
 use crate::{CommandError, KEYRING_SERVICE};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::fs;
+use std::path::PathBuf;
+use tauri::Manager;
 
 const LASTFM_API_URL: &str = "https://ws.audioscrobbler.com/2.0/";
 const LASTFM_API_KEY: &str = "802624099e59adcc599c9f6e6aa60371";
 const LASTFM_SHARED_SECRET: &str = "186e5d4fa717d145ece7e50aff07757c";
 const LASTFM_KEYRING_USER: &str = "lastfm-session-v1";
+const LASTFM_SESSION_FILE: &str = "lastfm-session-v1.json";
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,6 +72,15 @@ pub struct LastFmScrobbleInput {
     timestamp: u64,
 }
 
+fn lastfm_session_file(app: &tauri::AppHandle) -> Result<PathBuf, CommandError> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join(LASTFM_SESSION_FILE))
+        .map_err(|error| CommandError {
+            message: format!("application data directory unavailable: {error}"),
+        })
+}
+
 fn configured_credentials() -> (&'static str, &'static str) {
     (LASTFM_API_KEY, LASTFM_SHARED_SECRET)
 }
@@ -78,38 +91,84 @@ fn lastfm_keyring_entry() -> Result<keyring::Entry, CommandError> {
     })
 }
 
-fn load_stored_session() -> Result<Option<StoredLastFmSession>, CommandError> {
-    match lastfm_keyring_entry()?.get_password() {
-        Ok(session_json) => serde_json::from_str(&session_json)
-            .map(Some)
-            .map_err(|error| CommandError {
-                message: format!("stored Last.fm session is invalid: {error}"),
-            }),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(error) => Err(CommandError {
-            message: format!("Last.fm session load failed: {error}"),
-        }),
+fn load_stored_session(app: &tauri::AppHandle) -> Result<Option<StoredLastFmSession>, CommandError> {
+    // 1. Try durable app_data_dir file first (guaranteed across Android & desktop restarts)
+    if let Ok(path) = lastfm_session_file(app) {
+        if path.exists() {
+            if let Ok(content) = fs::read_to_string(&path) {
+                let trimmed = content.trim();
+                if !trimmed.is_empty() {
+                    if let Ok(session) = serde_json::from_str::<StoredLastFmSession>(trimmed) {
+                        return Ok(Some(session));
+                    }
+                }
+            }
+        }
     }
+
+    // 2. Fallback to OS keyring (if supported by OS, e.g. for desktop migration)
+    if let Ok(entry) = lastfm_keyring_entry() {
+        match entry.get_password() {
+            Ok(session_json) => {
+                if let Ok(session) = serde_json::from_str::<StoredLastFmSession>(&session_json) {
+                    // Sync to file storage for future fast/resilient loads
+                    if let Ok(path) = lastfm_session_file(app) {
+                        if let Some(parent) = path.parent() {
+                            let _ = fs::create_dir_all(parent);
+                        }
+                        let _ = fs::write(path, &session_json);
+                    }
+                    return Ok(Some(session));
+                }
+            }
+            Err(keyring::Error::NoEntry) => {}
+            Err(err) => {
+                eprintln!("[internal][lastfm][warn] keyring load failed: {err}");
+            }
+        }
+    }
+
+    Ok(None)
 }
 
-fn save_stored_session(session: &StoredLastFmSession) -> Result<(), CommandError> {
+fn save_stored_session(app: &tauri::AppHandle, session: &StoredLastFmSession) -> Result<(), CommandError> {
     let session_json = serde_json::to_string(session).map_err(|error| CommandError {
         message: format!("Last.fm session serialization failed: {error}"),
     })?;
-    lastfm_keyring_entry()?
-        .set_password(&session_json)
-        .map_err(|error| CommandError {
-            message: format!("Last.fm session save failed: {error}"),
-        })
+
+    // Always save to app_data_dir file (guaranteed on Android & desktop)
+    let path = lastfm_session_file(app)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| CommandError {
+            message: format!("Last.fm session directory creation failed: {error}"),
+        })?;
+    }
+    fs::write(&path, &session_json).map_err(|error| CommandError {
+        message: format!("Last.fm session file save failed: {error}"),
+    })?;
+
+    // Also attempt keyring save if supported
+    if let Ok(entry) = lastfm_keyring_entry() {
+        let _ = entry.set_password(&session_json);
+    }
+
+    Ok(())
 }
 
-fn delete_stored_session() -> Result<(), CommandError> {
-    match lastfm_keyring_entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(error) => Err(CommandError {
-            message: format!("Last.fm session delete failed: {error}"),
-        }),
+fn delete_stored_session(app: &tauri::AppHandle) -> Result<(), CommandError> {
+    // Delete file
+    if let Ok(path) = lastfm_session_file(app) {
+        if path.exists() {
+            let _ = fs::remove_file(path);
+        }
     }
+
+    // Delete keyring
+    if let Ok(entry) = lastfm_keyring_entry() {
+        let _ = entry.delete_credential();
+    }
+
+    Ok(())
 }
 
 fn api_signature(params: &BTreeMap<String, String>, shared_secret: &str) -> String {
@@ -198,7 +257,10 @@ pub async fn lastfm_auth_token() -> Result<LastFmAuthStart, CommandError> {
 }
 
 #[tauri::command]
-pub async fn lastfm_complete_auth(token: String) -> Result<LastFmSessionStatus, CommandError> {
+pub async fn lastfm_complete_auth(
+    app: tauri::AppHandle,
+    token: String,
+) -> Result<LastFmSessionStatus, CommandError> {
     let token = clean_metadata(token, "auth token")?;
     let mut params = BTreeMap::new();
     params.insert("method".to_string(), "auth.getSession".to_string());
@@ -208,27 +270,30 @@ pub async fn lastfm_complete_auth(token: String) -> Result<LastFmSessionStatus, 
         username: response.session.name,
         session_key: response.session.key,
     };
-    save_stored_session(&session)?;
+    save_stored_session(&app, &session)?;
     Ok(LastFmSessionStatus {
         username: session.username,
     })
 }
 
 #[tauri::command]
-pub fn lastfm_get_session() -> Result<Option<LastFmSessionStatus>, CommandError> {
-    Ok(load_stored_session()?.map(|session| LastFmSessionStatus {
+pub fn lastfm_get_session(app: tauri::AppHandle) -> Result<Option<LastFmSessionStatus>, CommandError> {
+    Ok(load_stored_session(&app)?.map(|session| LastFmSessionStatus {
         username: session.username,
     }))
 }
 
 #[tauri::command]
-pub fn lastfm_disconnect() -> Result<(), CommandError> {
-    delete_stored_session()
+pub fn lastfm_disconnect(app: tauri::AppHandle) -> Result<(), CommandError> {
+    delete_stored_session(&app)
 }
 
 #[tauri::command]
-pub async fn lastfm_update_now_playing(input: LastFmTrackInput) -> Result<(), CommandError> {
-    let session = load_stored_session()?.ok_or_else(|| CommandError {
+pub async fn lastfm_update_now_playing(
+    app: tauri::AppHandle,
+    input: LastFmTrackInput,
+) -> Result<(), CommandError> {
+    let session = load_stored_session(&app)?.ok_or_else(|| CommandError {
         message: "Last.fm is not connected.".to_string(),
     })?;
     let mut params = BTreeMap::new();
@@ -253,8 +318,11 @@ pub async fn lastfm_update_now_playing(input: LastFmTrackInput) -> Result<(), Co
 }
 
 #[tauri::command]
-pub async fn lastfm_scrobble(input: LastFmScrobbleInput) -> Result<(), CommandError> {
-    let session = load_stored_session()?.ok_or_else(|| CommandError {
+pub async fn lastfm_scrobble(
+    app: tauri::AppHandle,
+    input: LastFmScrobbleInput,
+) -> Result<(), CommandError> {
+    let session = load_stored_session(&app)?.ok_or_else(|| CommandError {
         message: "Last.fm is not connected.".to_string(),
     })?;
     let mut params = BTreeMap::new();

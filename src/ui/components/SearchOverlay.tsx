@@ -24,7 +24,6 @@ import { useTrackContextMenu } from "./TrackContextMenu";
 import { isMacOS } from "../platform";
 import { usePlaylistContextMenu } from "./PlaylistContextMenu";
 import { useIsMobile } from "../hooks/useIsMobile";
-import { usePlayHistory } from "../../player/playHistory";
 
 const RECENT_SEARCHES_KEY = "yt-music-dock:recent-searches-v2";
 const MAX_RECENT_SEARCHES = 12;
@@ -41,47 +40,6 @@ export interface RecentSearchEntry {
   album?: Album;
   timestamp: number;
 }
-
-// Initial starter history matching user's screenshot
-const DEFAULT_RECENT_SEARCHES: RecentSearchEntry[] = [
-  { id: "def-1", type: "query", query: "radhika sundori 2.0", timestamp: Date.now() - 1000 },
-  { id: "def-2", type: "query", query: "swami ji please", timestamp: Date.now() - 2000 },
-  { id: "def-3", type: "query", query: "riding song", timestamp: Date.now() - 3000 },
-  {
-    id: "def-artist-1",
-    type: "artist",
-    query: "Honey Singh",
-    title: "Honey Singh",
-    subtitle: "259M monthly audience",
-    artworkUrl: "https://lh3.googleusercontent.com/9n9s3b8i59b02n9j8s",
-    timestamp: Date.now() - 4000,
-  },
-  { id: "def-4", type: "query", query: "super 30", timestamp: Date.now() - 5000 },
-  { id: "def-5", type: "query", query: "jugalbandi", timestamp: Date.now() - 6000 },
-  { id: "def-6", type: "query", query: "rebel", timestamp: Date.now() - 7000 },
-];
-
-// Fallback carousel items matching screenshot
-const FALLBACK_CAROUSEL_ITEMS: Array<{ title: string; subtitle: string; query: string }> = [
-  { title: "Rama Rama Ratte Ratte", subtitle: "Traditional", query: "Rama Rama Ratte Ratte" },
-  { title: "Bangles", subtitle: "Honey Singh", query: "Bangles Honey Singh" },
-  { title: "Zehnaseeb", subtitle: "Hasee Toh Phasee", query: "Zehnaseeb" },
-  { title: "Sundri Janha", subtitle: "Odia Romantic", query: "Sundri Janha" },
-  { title: "Hass Hass", subtitle: "Diljit Dosanjh", query: "Hass Hass Diljit" },
-  { title: "Kesariya", subtitle: "Arijit Singh", query: "Kesariya" },
-];
-
-// Curated "You may also like" trending searches from screenshot
-const YOU_MAY_ALSO_LIKE: string[] = [
-  "dhanda nyoliwala",
-  "ap dhillon",
-  "jasmine sandlas",
-  "shreya ghoshal",
-  "post malone",
-  "diljit dosanjh",
-  "karan aujla",
-  "arijit singh",
-];
 
 // 2x2 Explore category cards matching screenshot
 const EXPLORE_CATEGORIES = [
@@ -146,32 +104,50 @@ function searchMatchScore(value: string, query: string): number {
   return 0;
 }
 
+const DUMMY_QUERY_NAMES = new Set([
+  "radhika sundori 2.0",
+  "swami ji please",
+  "riding song",
+  "super 30",
+  "jugalbandi",
+  "rebel",
+]);
+
+function sanitizeRecentSearchEntries(rawItems: unknown): RecentSearchEntry[] {
+  if (!Array.isArray(rawItems)) return [];
+  return rawItems
+    .filter((item): item is RecentSearchEntry => {
+      if (!item || typeof item !== "object") return false;
+      const id = String((item as any).id || "");
+      const query = String((item as any).query || "").trim();
+      if (!query) return false;
+      // Strip any hardcoded dummy items from previous sessions
+      if (id.startsWith("def-") || id.startsWith("dummy-")) return false;
+      if (DUMMY_QUERY_NAMES.has(query.toLowerCase())) return false;
+      return true;
+    })
+    .slice(0, MAX_RECENT_SEARCHES);
+}
+
 function loadStoredRecentSearches(): RecentSearchEntry[] {
   try {
     const raw = localStorage.getItem(RECENT_SEARCHES_KEY);
     if (!raw) {
-      // Check for legacy string array
-      const legacyRaw = localStorage.getItem("yt-music-dock:recent-searches");
-      if (legacyRaw) {
-        const parsed = JSON.parse(legacyRaw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((item, idx) => ({
-            id: `legacy-${idx}`,
-            type: "query" as const,
-            query: String(item),
-            timestamp: Date.now() - idx * 1000,
-          }));
-        }
+      try {
+        localStorage.removeItem("yt-music-dock:recent-searches");
+      } catch {
+        // ignore
       }
-      return DEFAULT_RECENT_SEARCHES;
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed.slice(0, MAX_RECENT_SEARCHES);
+    const sanitized = sanitizeRecentSearchEntries(parsed);
+    if (Array.isArray(parsed) && sanitized.length !== parsed.length) {
+      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(sanitized));
     }
-    return DEFAULT_RECENT_SEARCHES;
+    return sanitized;
   } catch {
-    return DEFAULT_RECENT_SEARCHES;
+    return [];
   }
 }
 
@@ -209,7 +185,6 @@ export function SearchOverlay({
   onOpenBrowse,
 }: SearchOverlayProps) {
   const isMobile = useIsMobile();
-  const playHistory = usePlayHistory();
   const { openTrackMenu } = useTrackContextMenu();
   const { openPlaylistMenu, openAlbumMenu } = usePlaylistContextMenu();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -234,19 +209,43 @@ export function SearchOverlay({
   const [voiceStatus, setVoiceStatus] = useState<"idle" | "listening" | "denied" | "unsupported">("idle");
   const [isSoundModalOpen, setIsSoundModalOpen] = useState(false);
 
-  // Derive unique recently played tracks for the horizontal carousel
-  const recentMediaTracks = useMemo(() => {
-    const seen = new Set<string>();
-    const unique: Track[] = [];
-    for (const entry of playHistory) {
-      if (entry.track && !seen.has(entry.track.id)) {
-        seen.add(entry.track.id);
-        unique.push(entry.track);
-        if (unique.length >= 10) break;
-      }
-    }
-    return unique;
-  }, [playHistory]);
+  // Sync recent searches from remote YouTube Music account if available
+  useEffect(() => {
+    if (!isOpen) return;
+    let isCurrent = true;
+
+    void searchController.getSearchHistory?.().then((remoteQueries) => {
+      if (!isCurrent || !remoteQueries || remoteQueries.length === 0) return;
+      setRecentSearches((prev) => {
+        const existingQueries = new Set(prev.map((item) => item.query.trim().toLowerCase()));
+        const additions: RecentSearchEntry[] = [];
+        for (const queryStr of remoteQueries) {
+          const trimmed = queryStr.trim();
+          if (trimmed && !existingQueries.has(trimmed.toLowerCase())) {
+            existingQueries.add(trimmed.toLowerCase());
+            additions.push({
+              id: `ytm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              type: "query",
+              query: trimmed,
+              timestamp: Date.now(),
+            });
+          }
+        }
+        if (additions.length === 0) return prev;
+        const updated = [...prev, ...additions].slice(0, MAX_RECENT_SEARCHES);
+        try {
+          localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+        return updated;
+      });
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isOpen, searchController]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -372,7 +371,45 @@ export function SearchOverlay({
         timestamp: Date.now(),
       },
       ...recentSearches.filter(
-        (item) => item.query.toLowerCase() !== artist.name.toLowerCase(),
+        (item) => item.id !== `artist-${artist.id}` && item.query.toLowerCase() !== artist.name.toLowerCase(),
+      ),
+    ].slice(0, MAX_RECENT_SEARCHES);
+    saveRecentSearches(next);
+  };
+
+  const rememberTrack = (track: Track) => {
+    const next = [
+      {
+        id: `track-${track.id}`,
+        type: "track" as const,
+        query: track.title,
+        title: track.title,
+        subtitle: track.artist,
+        artworkUrl: track.artworkUrl,
+        track,
+        timestamp: Date.now(),
+      },
+      ...recentSearches.filter(
+        (item) => item.id !== `track-${track.id}` && item.query.toLowerCase() !== track.title.toLowerCase(),
+      ),
+    ].slice(0, MAX_RECENT_SEARCHES);
+    saveRecentSearches(next);
+  };
+
+  const rememberAlbum = (album: Album) => {
+    const next = [
+      {
+        id: `album-${album.id}`,
+        type: "album" as const,
+        query: album.title,
+        title: album.title,
+        subtitle: album.artist || "Album",
+        artworkUrl: album.artworkUrl,
+        album,
+        timestamp: Date.now(),
+      },
+      ...recentSearches.filter(
+        (item) => item.id !== `album-${album.id}` && item.query.toLowerCase() !== album.title.toLowerCase(),
       ),
     ].slice(0, MAX_RECENT_SEARCHES);
     saveRecentSearches(next);
@@ -543,12 +580,18 @@ export function SearchOverlay({
     if (!preview) return;
     rememberSearch(query);
     if (preview.type === "playlist") onOpenPlaylist(preview.value);
-    if (preview.type === "album") onOpenAlbum(preview.value);
+    if (preview.type === "album") {
+      rememberAlbum(preview.value);
+      onOpenAlbum(preview.value);
+    }
     if (preview.type === "artist") {
       rememberArtist(preview.value);
       onOpenArtist(preview.value);
     }
-    if (preview.type === "track") onPlayTrack(preview.value);
+    if (preview.type === "track") {
+      rememberTrack(preview.value);
+      onPlayTrack(preview.value);
+    }
     onClose();
   };
 
@@ -573,9 +616,14 @@ export function SearchOverlay({
     }
   };
 
-  // Split recent searches into top list (first 4), then category cards, then remaining (e.g. rebel)
-  const topHistoryItems = recentSearches.slice(0, 4);
-  const remainingHistoryItems = recentSearches.slice(4);
+  const searchedMediaItems = useMemo(
+    () => recentSearches.filter((item) => item.type === "track" || item.type === "artist" || item.type === "album"),
+    [recentSearches],
+  );
+  const searchedQueries = useMemo(
+    () => recentSearches.filter((item) => item.type === "query"),
+    [recentSearches],
+  );
 
   return (
     <AnimatePresence>
@@ -800,6 +848,7 @@ export function SearchOverlay({
                           type="button"
                           onClick={() => {
                             rememberSearch(query);
+                            rememberTrack(track);
                             onPlayTrack(track);
                             onClose();
                           }}
@@ -887,13 +936,13 @@ export function SearchOverlay({
           ) : (
             /* ────────────── INITIAL YOUTUBE MUSIC SEARCH SCREEN ────────────── */
             <div className="flex flex-col gap-5 pt-1">
-              {/* SECTION: Recent searches */}
-              <section className="flex flex-col gap-2.5">
-                <div className="flex items-center justify-between px-1">
-                  <h2 className="text-[15px] font-bold tracking-tight text-white/90">
-                    Recent searches
-                  </h2>
-                  {recentSearches.length > 0 && (
+              {/* SECTION: Recent searches (only shown when there are actual recent searches) */}
+              {recentSearches.length > 0 && (
+                <section className="flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between px-1">
+                    <h2 className="text-[15px] font-bold tracking-tight text-white/90">
+                      Recent searches
+                    </h2>
                     <button
                       type="button"
                       onClick={clearAllRecentSearches}
@@ -901,141 +950,102 @@ export function SearchOverlay({
                     >
                       Clear all
                     </button>
-                  )}
-                </div>
+                  </div>
 
-                {/* Horizontal Carousel of Recent Items (like Rama Rama, Bangles, Zehnaseeb in screenshot) */}
-                <div className="flex gap-3 overflow-x-auto pb-2 pt-1 no-scrollbar overscroll-x-contain -mx-1 px-1">
-                  {recentMediaTracks.length > 0
-                    ? recentMediaTracks.map((track) => (
+                  {/* Horizontal Carousel of Searched Media Items (tracks/artists/albums clicked from search) */}
+                  {searchedMediaItems.length > 0 && (
+                    <div className="flex gap-3 overflow-x-auto pb-2 pt-1 no-scrollbar overscroll-x-contain -mx-1 px-1">
+                      {searchedMediaItems.map((item) => (
                         <button
-                          key={track.id}
+                          key={item.id}
                           type="button"
                           onClick={() => {
-                            rememberSearch(track.title);
-                            onPlayTrack(track);
-                            onClose();
+                            if (item.type === "track" && item.track) {
+                              onPlayTrack(item.track);
+                              onClose();
+                            } else if (item.type === "artist" && item.artist) {
+                              onOpenArtist(item.artist);
+                              onClose();
+                            } else if (item.type === "album" && item.album) {
+                              onOpenAlbum(item.album);
+                              onClose();
+                            } else {
+                              submitQuery(item.query, false);
+                            }
                           }}
                           className="group flex w-24 shrink-0 flex-col text-left transition-transform active:scale-95"
                         >
                           <div className="relative size-24 overflow-hidden rounded-xl bg-[#212121] shadow-md ring-1 ring-white/5">
                             <TrackArtwork
-                              className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              className={cn(
+                                "size-full object-cover transition-transform duration-300 group-hover:scale-105",
+                                item.type === "artist" && "rounded-full",
+                              )}
                               size={96}
-                              artworkUrl={track.artworkUrl}
+                              artworkUrl={item.artworkUrl}
                               iconSize={36}
                               loading="lazy"
+                              variant={item.type === "artist" ? "artist" : "track"}
                             />
                           </div>
                           <span className="mt-1.5 w-full truncate text-[12px] font-medium text-white leading-tight">
-                            {track.title}
+                            {item.title || item.query}
                           </span>
                           <span className="w-full truncate text-[10px] text-white/50 leading-tight">
-                            {track.artist}
-                          </span>
-                        </button>
-                      ))
-                    : FALLBACK_CAROUSEL_ITEMS.map((item, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => submitQuery(item.query, false)}
-                          className="group flex w-24 shrink-0 flex-col text-left transition-transform active:scale-95"
-                        >
-                          <div className="relative flex size-24 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-neutral-800 to-neutral-900 shadow-md ring-1 ring-white/5 p-2">
-                            <DiscNoteIcon size={36} className="text-white/40" />
-                          </div>
-                          <span className="mt-1.5 w-full truncate text-[12px] font-medium text-white leading-tight">
-                            {item.title}
-                          </span>
-                          <span className="w-full truncate text-[10px] text-white/50 leading-tight">
-                            {item.subtitle}
+                            {item.subtitle || (item.type === "artist" ? "Artist" : item.type === "album" ? "Album" : "Song")}
                           </span>
                         </button>
                       ))}
-                </div>
+                    </div>
+                  )}
 
-                {/* Vertical Recent Search Queries (first batch: radhika sundori, swami ji, riding song, Honey Singh) */}
-                <div className="flex flex-col divide-y divide-white/5 mt-1">
-                  {topHistoryItems.map((item) => {
-                    if (item.type === "artist") {
-                      return (
+                  {/* Recent Search Queries List */}
+                  {searchedQueries.length > 0 && (
+                    <div className="flex flex-col divide-y divide-white/5 mt-1">
+                      {searchedQueries.map((item) => (
                         <div
                           key={item.id}
-                          className="flex items-center justify-between py-2 px-1 hover:bg-white/5 rounded-xl transition-colors"
+                          className="flex items-center justify-between py-2.5 px-1 hover:bg-white/5 rounded-xl transition-colors"
                         >
                           <button
                             type="button"
-                            onClick={() => {
-                              if (item.artist) {
-                                onOpenArtist(item.artist);
-                                onClose();
-                              } else {
-                                submitQuery(item.query, false);
-                              }
-                            }}
-                            className="flex flex-1 min-w-0 items-center gap-3 text-left focus:outline-none"
+                            onClick={() => submitQuery(item.query, false)}
+                            className="flex flex-1 min-w-0 items-center gap-3.5 text-left focus:outline-none"
                           >
-                            <TrackArtwork
-                              className="size-10 rounded-full object-cover shrink-0 ring-1 ring-white/10"
-                              size={40}
-                              artworkUrl={item.artworkUrl}
-                              iconSize={20}
-                              loading="lazy"
-                              variant="artist"
-                            />
-                            <div className="flex flex-1 min-w-0 flex-col">
-                              <span className="truncate text-sm font-semibold text-white">
-                                {item.title || item.query}
-                              </span>
-                              <span className="truncate text-xs text-white/50">
-                                {item.subtitle || "Artist"}
-                              </span>
-                            </div>
+                            <ClockIcon size={18} className="shrink-0 text-white/50" />
+                            <span className="truncate text-sm font-medium text-white">
+                              {item.query}
+                            </span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeRecentSearch(item.id);
-                            }}
-                            className="flex size-8 shrink-0 items-center justify-center text-white/40 hover:text-white"
-                            aria-label={`Options for ${item.query}`}
-                          >
-                            <MenuDotsIcon size={18} />
-                          </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeRecentSearch(item.id);
+                              }}
+                              className="flex size-8 items-center justify-center text-white/40 hover:text-white active:scale-90"
+                              aria-label={`Remove ${item.query}`}
+                              title="Remove"
+                            >
+                              <CloseIcon size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleFillQuery(item.query)}
+                              className="flex size-8 shrink-0 items-center justify-center text-white/50 hover:text-white active:scale-90"
+                              aria-label={`Insert ${item.query}`}
+                              title="Insert query"
+                            >
+                              <ArrowUpRightIcon size={18} />
+                            </button>
+                          </div>
                         </div>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between py-2.5 px-1 hover:bg-white/5 rounded-xl transition-colors"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => submitQuery(item.query, false)}
-                          className="flex flex-1 min-w-0 items-center gap-3.5 text-left focus:outline-none"
-                        >
-                          <ClockIcon size={18} className="shrink-0 text-white/50" />
-                          <span className="truncate text-sm font-medium text-white">
-                            {item.query}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleFillQuery(item.query)}
-                          className="flex size-8 shrink-0 items-center justify-center text-white/50 hover:text-white active:scale-90"
-                          aria-label={`Insert ${item.query}`}
-                        >
-                          <ArrowUpRightIcon size={18} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
 
               {/* SECTION: 2x2 Explore Category Cards (New releases, Charts, Moods & genres, Podcasts) */}
               <section className="grid grid-cols-2 gap-2.5 my-1">
@@ -1062,71 +1072,6 @@ export function SearchOverlay({
                     </span>
                   </button>
                 ))}
-              </section>
-
-              {/* Remaining Recent Search items (e.g. rebel) */}
-              {remainingHistoryItems.length > 0 && (
-                <section className="flex flex-col divide-y divide-white/5">
-                  {remainingHistoryItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between py-2.5 px-1 hover:bg-white/5 rounded-xl transition-colors"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => submitQuery(item.query, false)}
-                        className="flex flex-1 min-w-0 items-center gap-3.5 text-left focus:outline-none"
-                      >
-                        <ClockIcon size={18} className="shrink-0 text-white/50" />
-                        <span className="truncate text-sm font-medium text-white">
-                          {item.query}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleFillQuery(item.query)}
-                        className="flex size-8 shrink-0 items-center justify-center text-white/50 hover:text-white active:scale-90"
-                        aria-label={`Insert ${item.query}`}
-                      >
-                        <ArrowUpRightIcon size={18} />
-                      </button>
-                    </div>
-                  ))}
-                </section>
-              )}
-
-              {/* SECTION: You may also like */}
-              <section className="flex flex-col gap-2 mt-2">
-                <h2 className="text-[15px] font-bold tracking-tight text-white/90 px-1">
-                  You may also like
-                </h2>
-                <div className="flex flex-col divide-y divide-white/5">
-                  {YOU_MAY_ALSO_LIKE.map((recommendation) => (
-                    <div
-                      key={recommendation}
-                      className="flex items-center justify-between py-2.5 px-1 hover:bg-white/5 rounded-xl transition-colors"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => submitQuery(recommendation, false)}
-                        className="flex flex-1 min-w-0 items-center gap-3.5 text-left focus:outline-none"
-                      >
-                        <SearchIcon size={18} className="shrink-0 text-white/50" />
-                        <span className="truncate text-sm font-medium text-white">
-                          {recommendation}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleFillQuery(recommendation)}
-                        className="flex size-8 shrink-0 items-center justify-center text-white/50 hover:text-white active:scale-90"
-                        aria-label={`Insert ${recommendation}`}
-                      >
-                        <ArrowUpRightIcon size={18} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
               </section>
             </div>
           )}

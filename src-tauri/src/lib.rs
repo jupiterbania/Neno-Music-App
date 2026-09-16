@@ -2844,6 +2844,21 @@ impl MediaBuffer {
         }
     }
 
+    fn append_chunk_bytes(&mut self, index: usize, slice: &[u8]) {
+        if index < self.chunks.len() {
+            match &mut self.chunks[index] {
+                Some(existing) => existing.extend_from_slice(slice),
+                None => self.chunks[index] = Some(slice.to_vec()),
+            }
+        }
+    }
+
+    fn clear_chunk(&mut self, index: usize) {
+        if index < self.chunks.len() {
+            self.chunks[index] = None;
+        }
+    }
+
     /// Copies `start..=end` out of the chunk list, which may straddle several chunks.
     pub(crate) fn read(&self, start: usize, end: usize) -> Vec<u8> {
         let mut out = Vec::with_capacity(end.saturating_sub(start) + 1);
@@ -3100,7 +3115,8 @@ Connection: close\r\n\r\n";
             .map(str::to_string)
     });
     let key = path
-        .trim_start_matches("/audio/")
+        .strip_prefix("/audio/")
+        .unwrap_or_else(|| path.trim_start_matches("/audio/"))
         .split('?')
         .next()
         .unwrap_or_default();
@@ -3120,75 +3136,94 @@ Connection: close\r\n\r\n";
         }
     };
     let has_range = range_header.is_some();
-    let (status, start, mut end) = parse_media_range(range_header.as_deref(), total_len)
+    let (status, start, end) = parse_media_range(range_header.as_deref(), total_len)
         .unwrap_or(("200 OK", 0, total_len.saturating_sub(1)));
 
-    /*
-     * A ranged request is answered as soon as its *first* byte exists, with however much of the
-     * range is contiguously available — not by waiting for all of it.
-     *
-     * This is the whole point of publishing a body before it has finished downloading. Media
-     * elements open with `Range: bytes=0-`, which asks for the entire file; waiting for that
-     * put the full download back in front of playback and made progressive serving worth
-     * nothing. A short 206 is legitimate — the element reads what it gets and asks for the
-     * rest — so the first chunk is enough to start on.
-     *
-     * A request with no Range header is different: it can only be answered 200, and a 200 whose
-     * Content-Length disagrees with the body is a truncated track. Those still wait for it all.
-     */
-    if total_len > 0 && method != "HEAD" {
-        let needed = if has_range { start } else { end };
-        let deadline = Instant::now() + MEDIA_WAIT_TIMEOUT;
-        loop {
-            let Ok(buffer) = item.buffer.lock() else { break };
-            if buffer.failed {
-                drop(buffer);
-                let _ = stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 0\r\n\r\n");
-                return;
-            }
-            let available = buffer.contiguous_len();
-            if available > needed {
-                if has_range {
-                    end = end.min(available.saturating_sub(1));
-                }
-                break;
-            }
-            drop(buffer);
-            if Instant::now() >= deadline {
-                let _ = stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 0\r\n\r\n");
-                return;
-            }
-            thread::sleep(MEDIA_WAIT_POLL);
-        }
+    if method == "HEAD" || total_len == 0 {
+        let body_len = if total_len == 0 { 0 } else { end.saturating_sub(start) + 1 };
+        let content_range = if status.starts_with("206") {
+            format!("Content-Range: bytes {start}-{end}/{total_len}\r\n")
+        } else {
+            String::new()
+        };
+        let headers = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: {}\r\nAccept-Ranges: bytes\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges\r\n{}Content-Length: {body_len}\r\nConnection: close\r\n\r\n",
+            item.mime_type,
+            content_range,
+        );
+        let _ = stream.write_all(headers.as_bytes());
+        return;
     }
 
-    let body_len = if total_len == 0 { 0 } else { end - start + 1 };
+    // Wait until the initial byte (`start`) is available in the buffer before sending headers
+    let deadline = Instant::now() + MEDIA_WAIT_TIMEOUT;
+    loop {
+        let Ok(buffer) = item.buffer.lock() else { break };
+        if buffer.failed {
+            drop(buffer);
+            let _ = stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 0\r\n\r\n");
+            return;
+        }
+        let available = buffer.contiguous_len();
+        if available > start {
+            break;
+        }
+        drop(buffer);
+        if Instant::now() >= deadline {
+            let _ = stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 0\r\n\r\n");
+            return;
+        }
+        thread::sleep(MEDIA_WAIT_POLL);
+    }
+
+    let body_len = end.saturating_sub(start) + 1;
     let content_range = if status.starts_with("206") {
         format!("Content-Range: bytes {start}-{end}/{total_len}\r\n")
     } else {
         String::new()
     };
-    /*
-     * `no-store` is load-bearing, not hygiene.
-     *
-     * Without it the webview keeps its own copy of every audio body it fetches — whole songs,
-     * several megabytes each, in the renderer process. That is memory this process is already
-     * holding, retained a second time by the one place that cannot be asked to give it back.
-     */
     let headers = format!(
         "HTTP/1.1 {status}\r\nContent-Type: {}\r\nAccept-Ranges: bytes\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges\r\n{}Content-Length: {body_len}\r\nConnection: close\r\n\r\n",
         item.mime_type,
         content_range,
     );
-    let _ = stream.write_all(headers.as_bytes());
-    if method == "HEAD" || total_len == 0 {
+    if stream.write_all(headers.as_bytes()).is_err() {
         return;
     }
-    let body = match item.buffer.lock() {
-        Ok(buffer) => buffer.read(start, end),
-        Err(_) => return,
-    };
-    let _ = stream.write_all(&body);
+
+    // Progressively stream chunks across the socket as they arrive in the media buffer
+    let mut pos = start;
+    while pos <= end {
+        let deadline = Instant::now() + MEDIA_WAIT_TIMEOUT;
+        loop {
+            let (available, failed) = match item.buffer.lock() {
+                Ok(guard) => (guard.contiguous_len(), guard.failed),
+                Err(_) => (0, true),
+            };
+            if failed {
+                return;
+            }
+            if available > pos {
+                let chunk_end = (pos + 65536).min(end + 1).min(available);
+                let bytes = match item.buffer.lock() {
+                    Ok(guard) => guard.read(pos, chunk_end.saturating_sub(1)),
+                    Err(_) => return,
+                };
+                if bytes.is_empty() {
+                    return;
+                }
+                if stream.write_all(&bytes).is_err() {
+                    return;
+                }
+                pos += bytes.len();
+                break;
+            }
+            if Instant::now() >= deadline {
+                return;
+            }
+            thread::sleep(MEDIA_WAIT_POLL);
+        }
+    }
 }
 
 fn parse_media_range(range_header: Option<&str>, total_len: usize) -> Option<(&'static str, usize, usize)> {
@@ -3992,8 +4027,6 @@ async fn fill_media_buffer(
     ranges: Vec<(usize, usize)>,
     slot: Option<(usize, u64)>,
 ) {
-    use futures_util::stream::StreamExt;
-
     let fail = |buffer: &Arc<Mutex<MediaBuffer>>| {
         if let Ok(mut guard) = buffer.lock() {
             guard.failed = true;
@@ -4038,141 +4071,95 @@ async fn fill_media_buffer(
         }
     };
 
-    let mut stream = futures_util::stream::iter(ranges.into_iter().enumerate().map(
-        |(index, (start, end))| {
-            let client = client.clone();
-            let url = url.clone();
-            let cookie = cookie.clone();
-            let abandoned = Arc::clone(&buffer);
-            async move {
-                /*
-                 * Checked here rather than between chunks because `buffered(1)` starts the next
-                 * request as soon as it is polled — by the time the outer loop could look, the
-                 * range is already in flight. `failed` is set by whoever gave up on the body:
-                 * the fill itself, or a decode that could not use it. `load_superseded` catches
-                 * the third way a range stops mattering: a newer load took this slot, and this
-                 * one is still going only because nothing had told it to stop.
-                 */
-                if abandoned.lock().map(|guard| guard.failed).unwrap_or(true)
-                    || load_superseded(slot)
-                {
-                    return Err((index, cache_error("fill abandoned")));
-                }
-                /*
-                 * Retried before it is given up on. A 403 on a range is usually transient —
-                 * googlevideo throttling rather than a URL that has gone bad — and abandoning
-                 * the assembly on the first one sent every such track down the whole-file
-                 * path, which can be refused in turn and then the play simply fails.
-                 */
-                let ranged = audio_url_with_range(&url, start as u64, end as u64);
-                let mut backoff = PLAYBACK_RETRY_BACKOFF;
-                let mut last: CommandError = cache_error("range never attempted");
+    for (index, (start, end)) in ranges.into_iter().enumerate() {
+        if buffer.lock().map(|guard| guard.failed).unwrap_or(true) || load_superseded(slot) {
+            eprintln!(
+                "[internal][tauri][info] fill_media_buffer abandoned track_id={}",
+                track_id
+            );
+            return;
+        }
 
-                for attempt in 0..PLAYBACK_RANGE_ATTEMPTS {
-                    // Re-checked every attempt: a supersede mid-backoff must not spend the next
-                    // request anyway, and this is what stops it doing that.
-                    if load_superseded(slot) {
-                        return Err((index, cache_error("fill abandoned")));
-                    }
-                    if attempt > 0 {
-                        tokio::time::sleep(backoff).await;
-                        backoff *= 2;
-                    }
-                    match googlevideo_audio_request(&client, &ranged, cookie.as_deref())
-                        .send()
-                        .await
-                    {
-                        Ok(response) if response.status().is_success() => {
-                            match response.bytes().await {
-                                Ok(body) => return Ok((index, body.to_vec())),
-                                Err(error) => {
-                                    last = cache_error(format!("audio range read failed: {error}"));
-                                }
-                            }
-                        }
-                        Ok(response) => {
-                            last = cache_error(format!("range returned {}", response.status()));
-                        }
-                        Err(error) => {
-                            last = cache_error(format!("audio range request failed: {error}"));
-                        }
-                    }
-                }
-                Err::<(usize, Vec<u8>), (usize, CommandError)>((index, last))
+        let ranged = audio_url_with_range(&url, start as u64, end as u64);
+        let mut backoff = PLAYBACK_RETRY_BACKOFF;
+        let mut last_error: CommandError = cache_error("range never attempted");
+        let mut success = false;
+
+        for attempt in 0..PLAYBACK_RANGE_ATTEMPTS {
+            if load_superseded(slot) {
+                return;
             }
-        },
-    ))
-    .buffered(1);
-
-    while let Some(result) = stream.next().await {
-        match result {
-            Ok((index, body)) => {
-                // The first chunk is the only one that can prove the container.
-                if index == 0 {
-                    if let Err(error) = verify_audio_container(&body, &mime_type) {
-                        eprintln!(
-                            "[internal][tauri][warn] fill_media_buffer bad container track_id={} error={}",
-                            track_id, error.message
-                        );
-                        fail(&buffer);
-                        return;
-                    }
-                }
-                match buffer.lock() {
-                    Ok(mut guard) => guard.put(index, body),
-                    Err(_) => return,
+            if attempt > 0 {
+                tokio::time::sleep(backoff).await;
+                backoff *= 2;
+                if let Ok(mut guard) = buffer.lock() {
+                    guard.clear_chunk(index);
                 }
             }
-            Err((index, error)) => {
-                /*
-                 * An abandoned fill must not fall back — the fallback downloads the *whole*
-                 * body, which is precisely the work being called off. Only a genuine refusal
-                 * gets the retry below.
-                 */
-                if buffer.lock().map(|guard| guard.failed).unwrap_or(true) {
-                    eprintln!(
-                        "[internal][tauri][info] fill_media_buffer abandoned track_id={}",
-                        track_id
-                    );
-                    return;
-                }
-                // Same reasoning, for the one case above cannot see: superseded rather than
-                // failed. The whole-file fallback below is the expensive part of this function —
-                // not worth starting for a track nobody is playing or preloading any more.
-                if load_superseded(slot) {
-                    eprintln!(
-                        "[internal][tauri][info] fill_media_buffer superseded, skipping fallback track_id={}",
-                        track_id
-                    );
-                    return;
-                }
-                /*
-                 * One refused range is not a dead track.
-                 *
-                 * googlevideo answers 403 on individual ranges often enough that the ranged
-                 * fetcher has always fallen back to a single whole-file request — this task
-                 * lost that when it was split out, so a transient refusal became a failed
-                 * play. Slower, but it is the path that has always worked.
-                 */
-                eprintln!(
-                    "[internal][tauri][warn] fill_media_buffer chunk {} failed ({}) falling back track_id={}",
-                    index, error.message, track_id
-                );
-                drop(stream);
-                match fetch_audio_bytes(url.clone(), track_id.clone(), cookie.clone()).await {
-                    Ok(whole) if !whole.is_empty() => {
-                        if verify_audio_container(&whole, &mime_type).is_err() {
-                            fail(&buffer);
+
+            match googlevideo_audio_request(&client, &ranged, cookie.as_deref()).send().await {
+                Ok(mut response) if response.status().is_success() => {
+                    let mut stream_failed = false;
+                    while let Ok(Some(chunk_bytes)) = response.chunk().await {
+                        if load_superseded(slot) || buffer.lock().map(|g| g.failed).unwrap_or(true) {
                             return;
                         }
                         if let Ok(mut guard) = buffer.lock() {
-                            guard.adopt_complete(whole);
+                            guard.append_chunk_bytes(index, &chunk_bytes);
                         }
                     }
-                    _ => fail(&buffer),
+
+                    if index == 0 {
+                        let is_valid = match buffer.lock() {
+                            Ok(guard) => {
+                                let head_bytes = guard.read(0, (end - start).min(131071));
+                                verify_audio_container(&head_bytes, &mime_type).is_ok()
+                            }
+                            Err(_) => false,
+                        };
+                        if !is_valid {
+                            eprintln!(
+                                "[internal][tauri][warn] fill_media_buffer bad container track_id={}",
+                                track_id
+                            );
+                            fail(&buffer);
+                            return;
+                        }
+                    }
+
+                    success = true;
+                    break;
                 }
+                Ok(response) => {
+                    last_error = cache_error(format!("range returned {}", response.status()));
+                }
+                Err(error) => {
+                    last_error = cache_error(format!("audio range request failed: {error}"));
+                }
+            }
+        }
+
+        if !success {
+            if buffer.lock().map(|guard| guard.failed).unwrap_or(true) || load_superseded(slot) {
                 return;
             }
+            eprintln!(
+                "[internal][tauri][warn] fill_media_buffer chunk {} failed ({}) falling back track_id={}",
+                index, last_error.message, track_id
+            );
+            match fetch_audio_bytes(url.clone(), track_id.clone(), cookie.clone()).await {
+                Ok(whole) if !whole.is_empty() => {
+                    if verify_audio_container(&whole, &mime_type).is_err() {
+                        fail(&buffer);
+                        return;
+                    }
+                    if let Ok(mut guard) = buffer.lock() {
+                        guard.adopt_complete(whole);
+                    }
+                }
+                _ => fail(&buffer),
+            }
+            return;
         }
     }
 }

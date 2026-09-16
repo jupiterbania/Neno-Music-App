@@ -1084,7 +1084,63 @@ export class AudioEngine {
     (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
     if (sourceUrl) audio.crossOrigin = "anonymous";
     audio.src = objectUrl;
-    audio.addEventListener("ended", () => this.emitEnded());
+    audio.addEventListener("ended", () => {
+      if (
+        Number.isFinite(audio.duration) &&
+        audio.duration > 5 &&
+        audio.currentTime < audio.duration - 2
+      ) {
+        logInternalWarn("AudioEngine: Native audio ended prematurely before track finish", {
+          videoId,
+          currentTime: audio.currentTime,
+          duration: audio.duration,
+        });
+        if (!this.userPaused && this.currentVideoId === videoId && playbackOwner === this) {
+          const resumePos = audio.currentTime;
+          audio.currentTime = resumePos;
+          audio.play().catch((err) => {
+            logInternalWarn("AudioEngine: failed to recover native audio from premature end", {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+          return;
+        }
+      }
+      this.emitEnded();
+    });
+    audio.addEventListener("pause", () => {
+      if (
+        !this.userPaused &&
+        this.currentVideoId === videoId &&
+        playbackOwner === this &&
+        !audio.ended
+      ) {
+        logInternalInfo("AudioEngine: Native audio auto-paused, resuming playback", {
+          videoId,
+        });
+        window.setTimeout(() => {
+          if (
+            !this.userPaused &&
+            this.currentVideoId === videoId &&
+            playbackOwner === this &&
+            !audio.ended &&
+            audio.paused
+          ) {
+            audio.play().catch((err) => {
+              logInternalWarn("AudioEngine: failed to auto-resume native audio", {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            });
+          }
+        }, 50);
+      }
+    });
+    audio.addEventListener("waiting", () => {
+      logInternalInfo("AudioEngine: Native audio waiting for buffer", { videoId });
+    });
+    audio.addEventListener("stalled", () => {
+      logInternalWarn("AudioEngine: Native audio playback stalled", { videoId });
+    });
     audio.addEventListener("error", () => {
       logInternalError(
         "AudioEngine native audio error",

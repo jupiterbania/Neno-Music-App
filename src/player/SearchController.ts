@@ -79,4 +79,9 @@ export class SearchController {
     if (!normalizedQuery || !this.dataSource.getSearchSuggestions) return [];
     return this.dataSource.getSearchSuggestions(normalizedQuery, onUpdate);
   }
+
+  async getSearchHistory(): Promise<string[]> {
+    if (!this.dataSource.getSearchHistory) return [];
+    return this.dataSource.getSearchHistory();
+  }
 }

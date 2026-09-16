@@ -199,8 +199,10 @@ import { DiscordRpcService } from "../../player/DiscordRPC";
 import { useDiscordPresenceEnabled } from "../settings/discord";
 import { useIsMobile } from "../hooks/useIsMobile";
 import {
+  readCachedLastFmUsername,
   setLastFmScrobblingEnabled,
   useLastFmScrobblingEnabled,
+  writeCachedLastFmUsername,
 } from "../settings/lastfm";
 import { isAndroid, isLinux, isTilingWindowManager, subscribeTilingWindowManager } from "../platform";
 import { AccountAvatar, AccountSwitcher, AddGoogleAccountButton, GoogleAccountSwitcher } from "../components/AccountSwitcher";
@@ -467,11 +469,15 @@ function SettingRow({
   title,
   description,
   disabled,
+  inline,
+  className,
   children,
 }: {
   title: string;
   description?: ReactNode;
   disabled?: boolean;
+  inline?: boolean;
+  className?: string;
   /** Receives the id of the row title so the control can point `aria-labelledby` at it. */
   children: (labelId: string) => ReactNode;
 }) {
@@ -479,8 +485,11 @@ function SettingRow({
   return (
     <div
       className={cn(
-        "flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-6 py-2.5 border-b border-border/20 last:border-b-0",
+        inline
+          ? "flex items-center justify-between gap-3 sm:gap-6 py-2.5 border-b border-border/20 last:border-b-0"
+          : "flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-6 py-2.5 border-b border-border/20 last:border-b-0",
         disabled && "pointer-events-none opacity-50",
+        className,
       )}
     >
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -491,7 +500,14 @@ function SettingRow({
           <span className="text-xs sm:text-sm text-muted-foreground leading-relaxed">{description}</span>
         ) : null}
       </span>
-      <span className="flex shrink-0 items-center gap-2 pt-0.5 self-start sm:self-auto">{children(labelId)}</span>
+      <span
+        className={cn(
+          "flex shrink-0 items-center gap-2",
+          inline ? "pl-2" : "pt-0.5 self-start sm:self-auto",
+        )}
+      >
+        {children(labelId)}
+      </span>
     </div>
   );
 }
@@ -513,15 +529,21 @@ function PotatoPcSettings() {
       <SettingRow
         title="Potato PC"
         description="Turns off animations, blur, shadows and the ambient artwork, and switches to opaque surfaces. Manage picks them off one at a time."
+        inline
       >
         {(labelId) => (
-          <>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setIsManaging((current) => !current)}
               aria-expanded={isManaging}
               aria-controls={panelId}
-              className="rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              className={cn(
+                "shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all active:scale-95 border focus-visible:outline-none",
+                isManaging
+                  ? "bg-primary/15 text-primary border-primary/30"
+                  : "bg-card/80 hover:bg-card text-muted-foreground hover:text-foreground border-border/50",
+              )}
             >
               {isManaging ? "Done" : "Manage"}
             </button>
@@ -530,7 +552,7 @@ function PotatoPcSettings() {
               onCheckedChange={setPotatoPcMode}
               aria-labelledby={labelId}
             />
-          </>
+          </div>
         )}
       </SettingRow>
 
@@ -747,7 +769,10 @@ export function SettingsPage({
   const [localPlaylistPathInputs, setLocalPlaylistPathInputs] = useState<Record<string, string>>({});
   const [localPlaylistError, setLocalPlaylistError] = useState<string | null>(null);
   const [localPlaylistBrowsingId, setLocalPlaylistBrowsingId] = useState<string | null>(null);
-  const [lastFmSession, setLastFmSession] = useState<LastFmSessionStatus | null>(null);
+  const [lastFmSession, setLastFmSession] = useState<LastFmSessionStatus | null>(() => {
+    const cached = readCachedLastFmUsername();
+    return cached ? { username: cached } : null;
+  });
   const [lastFmAuth, setLastFmAuth] = useState<LastFmAuthStart | null>(null);
   const [lastFmBusy, setLastFmBusy] = useState(false);
   const [lastFmError, setLastFmError] = useState<string | null>(null);
@@ -856,11 +881,19 @@ export function SettingsPage({
     let active = true;
     void LastFmService.getSession()
       .then((session) => {
-        if (active) setLastFmSession(session);
+        if (active) {
+          setLastFmSession(session);
+          writeCachedLastFmUsername(session?.username ?? null);
+        }
       })
       .catch((error) => {
         if (active) {
-          setLastFmError(error instanceof Error ? error.message : "Unable to load Last.fm connection.");
+          const cached = readCachedLastFmUsername();
+          if (cached) {
+            setLastFmSession({ username: cached });
+          } else {
+            setLastFmError(error instanceof Error ? error.message : "Unable to load Last.fm connection.");
+          }
         }
       });
     return () => {
@@ -1032,6 +1065,7 @@ export function SettingsPage({
     try {
       const session = await LastFmService.completeAuth(lastFmAuth.token);
       setLastFmSession(session);
+      writeCachedLastFmUsername(session.username);
       setLastFmAuth(null);
       setLastFmScrobblingEnabled(true);
     } catch (error) {
@@ -1047,6 +1081,7 @@ export function SettingsPage({
     try {
       await LastFmService.disconnect();
       setLastFmSession(null);
+      writeCachedLastFmUsername(null);
       setLastFmAuth(null);
     } catch (error) {
       setLastFmError(error instanceof Error ? error.message : "Unable to disconnect Last.fm.");
@@ -1384,46 +1419,54 @@ export function SettingsPage({
                 onCheckedChange={setLastFmScrobblingEnabled}
               />
 
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className={cn(SETTING_LABEL, "min-w-0 flex-1")}>
-                  <strong>Account connection</strong>
-                  <span>
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-card/40 border border-border/40 px-3.5 py-3">
+                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">Account connection</span>
+                    {lastFmSession && (
+                      <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                        Connected
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground line-clamp-1">
                     {lastFmAuth
-                      ? "Approve the connection in your browser, then finish it here."
+                      ? "Approve in browser, then tap Finish below."
                       : lastFmSession
-                        ? "Disconnecting stops future Last.fm updates from this app."
-                        : "A browser window will open so you can approve this app on Last.fm."}
+                        ? `Connected as ${lastFmSession.username}`
+                        : "Connect your Last.fm account to scrobble."}
                   </span>
-                </span>
+                </div>
+
                 {lastFmSession ? (
                   <button
-                    className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-card disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    className="shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground bg-card/80 hover:bg-card border border-border/50 transition-all active:scale-95 disabled:opacity-50 focus-visible:outline-none"
                     type="button"
                     disabled={lastFmBusy}
                     onClick={() => void handleDisconnectLastFm()}
                   >
-                    <LastFmIcon size={18} />
-                    {lastFmBusy ? "Disconnecting..." : "Disconnect"}
+                    <LastFmIcon size={13} />
+                    <span>{lastFmBusy ? "Disconnecting…" : "Disconnect"}</span>
                   </button>
                 ) : lastFmAuth ? (
                   <button
-                    className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    className="shrink-0 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition-all active:scale-95 hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none"
                     type="button"
                     disabled={lastFmBusy}
                     onClick={() => void handleFinishLastFmAuth()}
                   >
-                    <LastFmIcon size={18} />
-                    {lastFmBusy ? "Finishing..." : "Finish connection"}
+                    <LastFmIcon size={13} />
+                    <span>{lastFmBusy ? "Finishing…" : "Finish"}</span>
                   </button>
                 ) : (
                   <button
-                    className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    className="shrink-0 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition-all active:scale-95 hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none"
                     type="button"
                     disabled={lastFmBusy}
                     onClick={() => void handleStartLastFmAuth()}
                   >
-                    <LastFmIcon size={18} />
-                    {lastFmBusy ? "Opening..." : "Connect Last.fm"}
+                    <LastFmIcon size={13} />
+                    <span>{lastFmBusy ? "Opening…" : "Connect Last.fm"}</span>
                   </button>
                 )}
               </div>
@@ -1459,16 +1502,16 @@ export function SettingsPage({
 
             <div className="flex flex-col gap-4">
               {/* App details card */}
-              <div className="flex items-center justify-between gap-3 rounded-xl bg-card/40 border border-border/40 p-3.5 sm:p-4">
-                <div className="flex flex-col gap-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-foreground">Neno Music</span>
-                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-card/40 border border-border/40 px-3.5 py-3">
+                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-foreground">Neno Music</span>
+                    <span className="rounded-md bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                       {isAndroid ? "Android" : isMobile ? "Mobile" : "Desktop"}
                     </span>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    Installed version: {
+                  <span className="text-xs text-muted-foreground truncate">
+                    Installed: {
                       installedVersion
                         ? installedVersion === "Unknown" ? installedVersion : `v${installedVersion}`
                         : "v1.0.0"
@@ -1477,13 +1520,13 @@ export function SettingsPage({
                 </div>
 
                 <button
-                  className="flex items-center gap-2 rounded-full px-4 py-2 text-xs sm:text-sm font-semibold text-foreground bg-card hover:bg-card/80 border border-border/40 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-foreground bg-card/80 hover:bg-card border border-border/50 transition-all active:scale-95 disabled:opacity-50 focus-visible:outline-none"
                   type="button"
                   disabled={updateStatus === "checking"}
                   onClick={() => void handleCheckForUpdates()}
                 >
-                  <RefreshIcon size={16} className={updateStatus === "checking" ? "animate-spin" : undefined} />
-                  <span>{updateStatus === "checking" ? "Checking..." : "Check for updates"}</span>
+                  <RefreshIcon size={13} className={updateStatus === "checking" ? "animate-spin text-primary" : undefined} />
+                  <span>{updateStatus === "checking" ? "Checking…" : "Check updates"}</span>
                 </button>
               </div>
 
@@ -1533,18 +1576,18 @@ export function SettingsPage({
               )}
 
               {/* Quick start onboarding */}
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-card/40 border border-border/40 p-3.5 sm:p-4">
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-card/40 border border-border/40 px-3.5 py-3">
                 <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                  <span className="text-sm font-semibold text-foreground">Quick start tour</span>
-                  <span className="text-xs text-muted-foreground">Replay the guided feature introduction.</span>
+                  <span className="text-sm font-semibold text-foreground truncate">Quick start tour</span>
+                  <span className="text-xs text-muted-foreground truncate">Replay the guided feature introduction</span>
                 </div>
                 <button
-                  className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold text-foreground bg-card hover:bg-card/80 border border-border/40 transition-colors disabled:opacity-50 focus-visible:outline-none"
+                  className="shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-foreground bg-card/80 hover:bg-card border border-border/50 transition-all active:scale-95 disabled:opacity-50 focus-visible:outline-none"
                   type="button"
                   onClick={onRestartOnboarding}
                 >
-                  <RefreshIcon size={15} />
-                  <span>Start onboarding</span>
+                  <RefreshIcon size={13} />
+                  <span>Start tour</span>
                 </button>
               </div>
 

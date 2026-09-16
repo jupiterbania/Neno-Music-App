@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Track } from "../datasource/types";
 import { logInternalDebug, logInternalWarn } from "../internal/logging";
+import { readCachedLastFmUsername, writeCachedLastFmUsername } from "../ui/settings/lastfm";
 
 export interface LastFmAuthStart {
   token: string;
@@ -98,14 +99,29 @@ export class LastFmService {
     const session = await invoke<LastFmSessionStatus>("lastfm_complete_auth", { token });
     this.sessionChecked = true;
     this.hasSession = true;
+    writeCachedLastFmUsername(session.username);
     return session;
   }
 
   static async getSession(): Promise<LastFmSessionStatus | null> {
-    const session = await invoke<LastFmSessionStatus | null>("lastfm_get_session");
-    this.sessionChecked = true;
-    this.hasSession = Boolean(session);
-    return session;
+    try {
+      const session = await invoke<LastFmSessionStatus | null>("lastfm_get_session");
+      this.sessionChecked = true;
+      this.hasSession = Boolean(session);
+      if (session) {
+        writeCachedLastFmUsername(session.username);
+      }
+      return session;
+    } catch (error) {
+      // If backend fails transiently, fall back to cached username if available
+      const cached = readCachedLastFmUsername();
+      if (cached) {
+        this.sessionChecked = true;
+        this.hasSession = true;
+        return { username: cached };
+      }
+      throw error;
+    }
   }
 
   static async disconnect(): Promise<void> {
@@ -113,6 +129,7 @@ export class LastFmService {
     this.sessionChecked = true;
     this.hasSession = false;
     this.tracked = null;
+    writeCachedLastFmUsername(null);
   }
 
   static updatePlayback(update: PlaybackUpdate): void {
