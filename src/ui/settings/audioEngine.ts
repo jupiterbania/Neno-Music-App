@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { isMobileDevice } from "../platform";
+
 import {
   hydrateLocalJsonSetting,
   readLocalJsonSetting,
@@ -36,7 +36,7 @@ const STORAGE_KEY = "audio-engine-mode";
 /** Exported so `AudioEngine` can free its decks the moment the mode stops being `iframe`. */
 export const AUDIO_ENGINE_MODE_CHANGE_EVENT = "audio-engine-mode-change";
 const CHANGE_EVENT = AUDIO_ENGINE_MODE_CHANGE_EVENT;
-const DEFAULT_MODE: AudioEngineMode = isMobileDevice ? "native" : "rust";
+const DEFAULT_MODE: AudioEngineMode = "rust";
 
 export const AUDIO_ENGINE_MODES: ReadonlyArray<{
   value: AudioEngineMode;

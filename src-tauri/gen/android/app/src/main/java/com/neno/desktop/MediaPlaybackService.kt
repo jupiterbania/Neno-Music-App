@@ -508,14 +508,21 @@ class MediaPlaybackService : Service() {
             mediaStyle.setMediaSession(token)
         }
 
+        val fallbackLargeIcon: Bitmap = try {
+            BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
+        } catch (_: Exception) { BitmapFactory.decodeResource(resources, android.R.drawable.ic_menu_info_details) }
+
         val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(currentArtworkBitmap ?: fallbackLargeIcon)
             .setContentTitle(currentTitle)
             .setContentText(currentArtist)
             .setSubText("Neno Music")
             .setContentIntent(contentPendingIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(isPlaying)
+            .setColorized(true)
+            .setColor(0xFFFF7700.toInt())
             .addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent)
             .addAction(
                 if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
@@ -524,10 +531,6 @@ class MediaPlaybackService : Service() {
             )
             .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
             .setStyle(mediaStyle)
-
-        currentArtworkBitmap?.let {
-            notificationBuilder.setLargeIcon(it)
-        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
