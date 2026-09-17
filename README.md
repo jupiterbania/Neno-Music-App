@@ -32,29 +32,34 @@ Whether you're listening on your desktop while gaming or coding, or streaming on
 ## 📸 Screenshots
 
 <div align="center">
+  <p><b>🏠 Home Dashboard & Recommendations</b></p>
+  <img src="assets/Screenshoots/Home%20screen.jpg" alt="Home Dashboard" width="100%" />
+  
+  <br /><br />
+
   <table>
     <tr>
       <td align="center" width="50%">
         <img src="assets/Screenshoots/Music%20Player.jpg" alt="Music Player & Lyrics" width="100%" />
         <br />
-        <b>🎵 Now Playing & Real-time Lyrics</b>
+        <b>🎵 Now Playing & Real-time Synced Lyrics</b>
       </td>
       <td align="center" width="50%">
         <img src="assets/Screenshoots/ArtistAlbum%20Screen.jpg" alt="Artist & Album View" width="100%" />
         <br />
-        <b>💿 Artist Discography & Album View</b>
+        <b>💿 Artist Discography & Album Details</b>
       </td>
     </tr>
     <tr>
       <td align="center" width="50%">
         <img src="assets/Screenshoots/Search%20Screen.jpg" alt="Search & Discovery" width="100%" />
         <br />
-        <b>🔍 Instant Search & Moods</b>
+        <b>🔍 Instant Search & Curated Moods</b>
       </td>
       <td align="center" width="50%">
         <img src="assets/Screenshoots/Satting%20Login%20Screen.jpg" alt="Settings & Account" width="100%" />
         <br />
-        <b>⚙️ Settings & Account Management</b>
+        <b>⚙️ Settings & Google Account Sync</b>
       </td>
     </tr>
   </table>
