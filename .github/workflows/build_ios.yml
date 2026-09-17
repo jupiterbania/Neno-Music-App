@@ -78,13 +78,12 @@ jobs:
       - name: Prepare Artifacts
         run: |
           mkdir -p artifacts
-          echo "Listing generated Apple files:"
-          find src-tauri/gen/apple -maxdepth 4 -ls || true
-
-          if [ -d "src-tauri/gen/apple/build" ]; then
-            cd src-tauri/gen/apple/build
-            zip -r ../../../../artifacts/neno-ios-build.zip .
-            cd ../../../..
+          echo "Searching for compiled .ipa and .app files:"
+          find src-tauri/gen/apple/build -name "*.ipa" -exec cp {} artifacts/Neno-Music.ipa \; || true
+          
+          if [ ! -f "artifacts/Neno-Music.ipa" ]; then
+            echo "Direct IPA not found in expected folder, searching everywhere in apple gen:"
+            find src-tauri/gen/apple -name "*.ipa" -exec cp {} artifacts/Neno-Music.ipa \; || true
           fi
 
           zip -r artifacts/neno-xcode-project.zip src-tauri/gen/apple -x "*/DerivedData/*"
@@ -93,5 +92,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Neno-iOS-Build
-          path: artifacts/*.zip
+          path: |
+            artifacts/Neno-Music.ipa
+            artifacts/*.zip
           retention-days: 14
