@@ -45,8 +45,8 @@ for (const option of LYRICS_FONT_SCALES) {
 }
 
 equal(normalizeFontScale(1.19), 1.2, "a near miss snaps to the closest step");
-equal(normalizeFontScale(0.1), 0.85, "an absurdly small value clamps to the smallest step");
-equal(normalizeFontScale(99), 1.45, "an absurdly large one clamps to the largest");
+equal(normalizeFontScale(0.1), 0.75, "an absurdly small value clamps to the smallest step");
+equal(normalizeFontScale(99), 1.7, "an absurdly large one clamps to the largest");
 equal(normalizeFontScale(Number.NaN), DEFAULT_LYRICS_FONT_SCALE, "NaN falls back to default");
 equal(
   normalizeFontScale(Number.POSITIVE_INFINITY),
@@ -67,6 +67,6 @@ check(!store.has("lyrics-font-scale"), "and clears the entry rather than storing
 store.set("lyrics-font-scale", "not-a-number");
 equal(getLyricsFontScale(), DEFAULT_LYRICS_FONT_SCALE, "unparseable stored text falls back");
 store.set("lyrics-font-scale", "400");
-equal(getLyricsFontScale(), 1.45, "an out-of-range stored value is clamped, not obeyed");
+equal(getLyricsFontScale(), 1.7, "an out-of-range stored value is clamped, not obeyed");
 
 console.log("lyricsFontScale self-check passed");

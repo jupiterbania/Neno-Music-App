@@ -212,12 +212,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: ${{ matrix.platform.apple_signing_identity }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ env.RELEASE_TAG }}
           releaseDraft: false
-          uploadUpdaterJson: ${{ steps.release_metadata.outputs.publish_update }}
+          uploadUpdaterJson: false
           uploadUpdaterSignatures: false
           updaterJsonPreferNsis: true
           args: ${{ matrix.platform.build_args }}
@@ -285,12 +283,10 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install NDK
+      - name: Accept Licenses and Install NDK
         run: |
-          sdkmanager --install "ndk;26.1.10909125"
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;26.1.10909125"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -447,6 +443,7 @@ jobs:
 
   publish-updater-channel:
     name: Publish gated updater metadata
+    if: false
     needs: [prepare, release]
     runs-on: ubuntu-latest
     env:
@@ -520,6 +517,7 @@ jobs:
 
   publish-winget:
     name: Publish to winget
+    if: false
     needs: [prepare, release]
     runs-on: ubuntu-latest
     # `winget-releaser` only *bumps* a package that already exists in microsoft/winget-pkgs; it
