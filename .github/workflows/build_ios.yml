@@ -14,12 +14,6 @@ on:
           - app-store-connect
   push:
     branches: [main]
-    paths:
-      - 'src/**'
-      - 'src-tauri/**'
-      - 'package.json'
-      - 'vite.config.ts'
-      - '.github/workflows/build_ios.yml'
 
 permissions:
   contents: read
@@ -39,17 +33,13 @@ jobs:
           xcode-version: latest-stable
 
       - name: Setup CMake policy wrapper
-        shell: bash
         run: |
-          REAL_CMAKE="$(which cmake)"
-          echo "Original CMake found at: $REAL_CMAKE"
-          mkdir -p "$HOME/cmake-bin"
-          cat << EOF > "$HOME/cmake-bin/cmake"
-#!/bin/bash
-exec "$REAL_CMAKE" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 "\$@"
-EOF
-          chmod +x "$HOME/cmake-bin/cmake"
-          echo "$HOME/cmake-bin" >> "$GITHUB_PATH"
+          REAL_CMAKE=$(which cmake)
+          mkdir -p $HOME/cmake-bin
+          echo '#!/bin/bash' > $HOME/cmake-bin/cmake
+          echo "exec $REAL_CMAKE -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \"\$@\"" >> $HOME/cmake-bin/cmake
+          chmod +x $HOME/cmake-bin/cmake
+          echo "$HOME/cmake-bin" >> $GITHUB_PATH
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -85,25 +75,21 @@ EOF
 
       - name: Build Tauri iOS App
         run: |
-          EXPORT_OPT="${{ github.event.inputs.export_method || 'debugging' }}"
-          npx tauri ios build --export-method "$EXPORT_OPT" --no-sign
+          npx tauri ios build --export-method debugging --no-sign
 
       - name: Prepare Artifacts
-        shell: bash
         run: |
           mkdir -p artifacts
           echo "Listing generated Apple files:"
           find src-tauri/gen/apple -maxdepth 4 -ls || true
 
-          # If build directory exists, package it
           if [ -d "src-tauri/gen/apple/build" ]; then
             cd src-tauri/gen/apple/build
             zip -r ../../../../artifacts/neno-ios-build.zip .
             cd ../../../..
           fi
 
-          # Also package entire apple gen folder just in case user needs the Xcode project
-          zip -r artifacts/neno-xcode-project.zip src-tauri/gen/apple -x "*/DerivedData/*" "*/.build/*"
+          zip -r artifacts/neno-xcode-project.zip src-tauri/gen/apple -x "*/DerivedData/*"
 
       - name: Upload iOS Build Artifact
         uses: actions/upload-artifact@v4
