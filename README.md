@@ -6,12 +6,12 @@
 
 <p align="center">
   <b>A fast, modern, and beautiful music streaming client powered by YouTube Music.</b><br />
-  Built with Tauri v2, Rust, React, and TypeScript for <b>Android, Windows, macOS, and Linux</b>.
+  Built with Tauri v2, Rust, React, and TypeScript for <b>Android, iOS, Windows, macOS, and Linux</b>.
 </p>
 
 <p align="center">
-  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/badge/version-v1.0.0-ff3d00?style=for-the-badge" alt="Version 1.0.0"></a>
-  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/badge/platform-Android%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-4f46e5?style=for-the-badge" alt="Platforms"></a>
+  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/badge/version-v1.0.1-ff3d00?style=for-the-badge" alt="Version 1.0.1"></a>
+  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/badge/platform-Android%20%7C%20iOS%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-4f46e5?style=for-the-badge" alt="Platforms"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-0ea5e9?style=for-the-badge" alt="License"></a>
   <a href="https://github.com/jupiterbania/Neno-Music-App/stargazers"><img src="https://img.shields.io/github/stars/jupiterbania/Neno-Music-App?style=for-the-badge&color=ff9700&label=stars" alt="Stars"></a>
 </p>
@@ -118,13 +118,19 @@ Pre-built binaries and packages are available on the **[Releases Page](https://g
 
 ### 📱 Android APK
 Download the appropriate APK file for your phone or tablet:
-- **`Neno-arm64-release.apk`**: Recommended for almost all modern Android phones (64-bit ARM).
-- **`Neno-arm-release.apk`**: For older 32-bit ARM devices.
+- **`app-arm64-release.apk`**: Recommended for almost all modern Android phones (64-bit ARM).
+- **`app-arm-release.apk`**: For older 32-bit ARM devices.
+- **`app-universal-release.apk`**: Universal APK for all Android architectures.
 
 > **Installation Note**: Enable "Install unknown apps" in your Android settings for your browser or file manager when installing the APK for the first time.
 
+### 🍏 iOS (iPhone & iPad)
+Download the iOS package from the **[Releases Page](https://github.com/jupiterbania/Neno-Music-App/releases/latest)**:
+- **`neno-ios-build.zip`**: Compiled iOS application bundle (Ready to sideload onto your iPhone/iPad via **AltStore**, **Sideloadly**, or **TrollStore**).
+- **`neno-xcode-project.zip`**: Full Xcode source project for compiling & debugging directly in Xcode on a Mac.
+
 ### 💻 Desktop (Windows, macOS, Linux)
-- **Windows**: Download the `.msi` installer or standalone executable from releases.
+- **Windows**: Download the `.msi` installer or standalone `.exe` setup from releases.
 - **Linux**: Available in `.deb`, `.rpm`, `.AppImage`, and Arch Linux AUR (`yay -S neno`).
 - **macOS**: Download the `.dmg` package from releases.
 
