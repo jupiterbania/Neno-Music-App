@@ -36,8 +36,15 @@ jobs:
         run: |
           REAL_CMAKE=$(which cmake)
           mkdir -p $HOME/cmake-bin
-          echo '#!/bin/bash' > $HOME/cmake-bin/cmake
-          echo "exec $REAL_CMAKE -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \"\$@\"" >> $HOME/cmake-bin/cmake
+          cat << 'EOF' > $HOME/cmake-bin/cmake
+#!/bin/bash
+REAL_CMAKE_BIN=$(which -a cmake | grep -v cmake-bin | head -n 1)
+if [[ "$*" == *"--build"* ]]; then
+  exec "$REAL_CMAKE_BIN" "$@"
+else
+  exec "$REAL_CMAKE_BIN" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 "$@"
+fi
+EOF
           chmod +x $HOME/cmake-bin/cmake
           echo "$HOME/cmake-bin" >> $GITHUB_PATH
 
