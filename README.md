@@ -117,17 +117,16 @@ Whether you're listening on your desktop while gaming or coding, or streaming on
 Pre-built binaries and packages are available on the **[Releases Page](https://github.com/jupiterbania/Neno-Music-App/releases/latest)**.
 
 ### 📱 Android APK
-Download the appropriate APK file for your phone or tablet:
-- **`app-arm64-release.apk`**: Recommended for almost all modern Android phones (64-bit ARM).
-- **`app-arm-release.apk`**: For older 32-bit ARM devices.
-- **`app-universal-release.apk`**: Universal APK for all Android architectures.
+Download the appropriate APK file for your phone or tablet from the **[Releases Page](https://github.com/jupiterbania/Neno-Music-App/releases/latest)**:
+- **`Neno-Music-arm64.apk`**: Recommended for almost all modern Android phones (64-bit ARM).
+- **`Neno-Music-universal.apk`**: Universal APK compatible with all Android devices.
+- **`Neno-Music-arm32.apk`**: For older 32-bit ARM Android devices.
 
 > **Installation Note**: Enable "Install unknown apps" in your Android settings for your browser or file manager when installing the APK for the first time.
 
 ### 🍏 iOS (iPhone & iPad)
-Download the iOS package from the **[Releases Page](https://github.com/jupiterbania/Neno-Music-App/releases/latest)**:
-- **`neno-ios-build.zip`**: Compiled iOS application bundle (Ready to sideload onto your iPhone/iPad via **AltStore**, **Sideloadly**, or **TrollStore**).
-- **`neno-xcode-project.zip`**: Full Xcode source project for compiling & debugging directly in Xcode on a Mac.
+Download the direct `.ipa` package from the **[Releases Page](https://github.com/jupiterbania/Neno-Music-App/releases/latest)**:
+- **`Neno-Music.ipa`**: Direct standalone iOS application package. Ready to install/sideload directly onto your iPhone or iPad using **AltStore**, **Sideloadly**, **Scarlet**, or **TrollStore** (no unzipping required).
 
 ### 💻 Desktop (Windows, macOS, Linux)
 - **Windows**: Download the `.msi` installer or standalone `.exe` setup from releases.
