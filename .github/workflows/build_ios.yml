@@ -4,10 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       export_method:
-        description: 'Export method (development, ad-hoc, or enterprise)'
+        description: 'Export method'
         required: false
-        default: 'development'
-        type: string
+        default: 'debugging'
+        type: choice
+        options:
+          - debugging
+          - release-testing
+          - app-store-connect
   push:
     branches: [main]
     paths:
@@ -63,21 +67,25 @@ jobs:
 
       - name: Build Tauri iOS App
         run: |
-          npx tauri ios build --export-method development --no-sign
+          EXPORT_OPT="${{ github.event.inputs.export_method || 'debugging' }}"
+          npx tauri ios build --export-method "$EXPORT_OPT" --no-sign
 
       - name: Prepare Artifacts
         shell: bash
         run: |
           mkdir -p artifacts
+          echo "Listing generated Apple files:"
+          find src-tauri/gen/apple -maxdepth 4 -ls || true
+
+          # If build directory exists, package it
           if [ -d "src-tauri/gen/apple/build" ]; then
             cd src-tauri/gen/apple/build
             zip -r ../../../../artifacts/neno-ios-build.zip .
             cd ../../../..
-          else
-            echo "Search for compiled app/ipa files:"
-            find src-tauri/gen/apple -name "*.app" -o -name "*.ipa" -o -name "*.dylib"
-            zip -r artifacts/neno-ios-gen.zip src-tauri/gen/apple
           fi
+
+          # Also package entire apple gen folder just in case user needs the Xcode project
+          zip -r artifacts/neno-xcode-project.zip src-tauri/gen/apple -x "*/DerivedData/*" "*/.build/*"
 
       - name: Upload iOS Build Artifact
         uses: actions/upload-artifact@v4
