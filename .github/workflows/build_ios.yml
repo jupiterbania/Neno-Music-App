@@ -63,7 +63,7 @@ jobs:
 
       - name: Build Tauri iOS App
         run: |
-          npx tauri ios build --no-signing
+          npx tauri ios build --export-method development --no-sign
 
       - name: Prepare Artifacts
         shell: bash
