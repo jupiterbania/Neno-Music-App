@@ -21,13 +21,19 @@ import { useIsMobile } from "../hooks/useIsMobile";
 import { MobileHeader } from "../components/mobile/MobileHeader";
 import { logInternalError } from "../../internal/logging";
 
-const FALLBACK_QUERIES = [
-  "new music",
-  "popular songs",
-  "indie mix",
-  "electronic mix",
-  "late night music",
-  "discover weekly",
+const DISCOVERY_QUERIES = [
+  "latest songs",
+  "trending music",
+  "bollywood top hits",
+  "punjabi latest songs",
+  "romantic hindi songs",
+  "global top hits",
+  "viral songs",
+  "lofi chill beats",
+  "indie pop mix",
+  "new music releases",
+  "party dance songs",
+  "acoustic melodies",
 ];
 
 /*
@@ -241,19 +247,20 @@ export function HomePage({
       return [];
     }
     const shelves = [...ytmHomeFeed.shelves];
-    const listenAgainIdx = shelves.findIndex((shelf) => isListenAgainTitle(shelf.title));
     const quickPicksIdx = shelves.findIndex((shelf) => isQuickPicksTitle(shelf.title));
 
-    if (listenAgainIdx !== -1 && quickPicksIdx !== -1) {
-      const temp = shelves[listenAgainIdx];
-      shelves[listenAgainIdx] = shelves[quickPicksIdx];
-      shelves[quickPicksIdx] = temp;
-    } else if (quickPicksIdx > 0 && listenAgainIdx === -1) {
+    if (quickPicksIdx > 0) {
       const [quickShelf] = shelves.splice(quickPicksIdx, 1);
       shelves.unshift(quickShelf);
     }
     return shelves;
   }, [ytmHomeFeed]);
+
+  const quickPicksShelf = orderedShelves[0] ?? null;
+  const remainingShelves = useMemo(
+    () => (orderedShelves.length > 1 ? orderedShelves.slice(1) : []),
+    [orderedShelves],
+  );
 
   useEffect(() => {
     if (!showYtmHomeFeed) return;
@@ -325,12 +332,15 @@ export function HomePage({
           );
         }
 
-        if (loaded.length < 12) {
-          const query = FALLBACK_QUERIES[Math.floor(Math.random() * FALLBACK_QUERIES.length)];
-          try {
-            loaded.push(...await searchController.searchTracks(query));
-          } catch {
-            // Recent tracks still provide a useful offline fallback.
+        if (loaded.length < 18) {
+          const randomQueries = shuffle(DISCOVERY_QUERIES).slice(0, 2);
+          const searchSets = await Promise.allSettled(
+            randomQueries.map((query) => searchController.searchTracks(query)),
+          );
+          for (const res of searchSets) {
+            if (res.status === "fulfilled") {
+              loaded.push(...res.value);
+            }
           }
         }
 
@@ -359,8 +369,10 @@ export function HomePage({
     if (isRefreshing) return;
     setIsRefreshing(true);
     setIsLoadingSuggestions(true);
+    setSuggestions([]);
     if (showYtmHomeFeed && libraryState.status === "ready") {
       setIsLoadingHomeFeed(true);
+      setYtmHomeFeed(null);
     }
 
     persistentSuggestions = null;
@@ -370,7 +382,7 @@ export function HomePage({
 
     const fetchSuggestions = async () => {
       try {
-        const seeds = shuffle(recentlyPlayed).slice(0, 3);
+        const seeds = shuffle(recentlyPlayed).slice(0, 4);
         let loaded: Track[] = [];
 
         if (seeds.length > 0) {
@@ -382,12 +394,14 @@ export function HomePage({
           );
         }
 
-        if (loaded.length < 12) {
-          const query = FALLBACK_QUERIES[Math.floor(Math.random() * FALLBACK_QUERIES.length)];
-          try {
-            loaded.push(...await searchController.searchTracks(query));
-          } catch {
-            // fallback
+        // Always query 2-3 randomized discovery topics for a fresh, rich songs refresh
+        const randomQueries = shuffle(DISCOVERY_QUERIES).slice(0, 3);
+        const searchSets = await Promise.allSettled(
+          randomQueries.map((query) => searchController.searchTracks(query)),
+        );
+        for (const res of searchSets) {
+          if (res.status === "fulfilled") {
+            loaded.push(...res.value);
           }
         }
 
@@ -418,6 +432,7 @@ export function HomePage({
       }
     };
 
+    void libraryController.refresh({ suppressFailure: true }).catch(() => {});
     await Promise.allSettled([fetchSuggestions(), fetchHomeFeed()]);
     setIsRefreshing(false);
   }, [
@@ -444,7 +459,6 @@ export function HomePage({
     TOP_SUGGESTIONS_COUNT + MORE_SUGGESTIONS_COUNT,
   );
   const surpriseSuggestions = suggestions.slice(TOP_SUGGESTIONS_COUNT);
-
   const playTrack = (track: Track, queue: readonly Track[]) => {
     void playerController.playTrackById(track.id, queue, true);
   };
@@ -508,6 +522,7 @@ export function HomePage({
                     subtitle={track.artist}
                     onContextMenu={(event) => openTrackMenu(event, track)}
                     onSelect={() => playTrack(track, suggestions)}
+                    onWarm={() => playerController.warmTrack(track)}
                   />
                 </div>
               ))}
@@ -546,6 +561,7 @@ export function HomePage({
                   subtitle={track.artist}
                   onContextMenu={(event) => openTrackMenu(event, track)}
                   onSelect={() => playTrack(track, suggestions)}
+                  onWarm={() => playerController.warmTrack(track)}
                 />
               )),
             ]
@@ -584,15 +600,13 @@ export function HomePage({
         </section>
       )}
 
+      {/* ── 1. Made for you ──────────────────────────────────────────────── */}
       {showMadeForYou && madeForYouSection}
 
-      {/* Directly under the carousel: the picks are what you came for, these are where you
-          go when none of them appeal. */}
+      {/* ── 2. Library & Browse Destinations ─────────────────────────────── */}
       <HomeDestinations {...destinations} />
 
-      {/* ── YouTube Music Home Feed ──────────────────────────────────────────
-          Personalized shelves from FEmusic_home — same data YTM's own Home tab shows.
-          Only rendered when the user is signed in (status === "ready"). */}
+      {/* ── 3. Quick Picks ───────────────────────────────────────────────── */}
       {showYtmHomeFeed && libraryState.status === "ready" && (
         <div className="flex flex-col gap-8">
           {isLoadingHomeFeed && !ytmHomeFeed && (
@@ -604,15 +618,28 @@ export function HomePage({
               <AlbumGridSkeleton count={12} label="Loading your feed" />
             </section>
           )}
-          {orderedShelves.length > 0 && (
+          {quickPicksShelf && (
             <BrowseShelves
-              shelves={orderedShelves}
+              shelves={[quickPicksShelf]}
               playerController={playerController}
               onOpenAlbum={onOpenAlbum ?? (() => {})}
               onOpenArtist={onOpenArtist ?? (() => {})}
               onOpenPlaylist={onOpenPlaylist ?? (() => {})}
             />
           )}
+        </div>
+      )}
+
+      {/* ── 4. Remaining YouTube Music shelves (From the community, etc.) ─── */}
+      {showYtmHomeFeed && libraryState.status === "ready" && remainingShelves.length > 0 && (
+        <div className="flex flex-col gap-8">
+          <BrowseShelves
+            shelves={remainingShelves}
+            playerController={playerController}
+            onOpenAlbum={onOpenAlbum ?? (() => {})}
+            onOpenArtist={onOpenArtist ?? (() => {})}
+            onOpenPlaylist={onOpenPlaylist ?? (() => {})}
+          />
         </div>
       )}
 
@@ -667,7 +694,7 @@ export function HomePage({
             {compactRecent.map((track) => (
               <div
                 key={track.id}
-                className="group/recent relative flex items-center gap-2.5 rounded-xl border border-border/35 bg-card/60 backdrop-blur-sm p-1.5 text-left transition-all hover:bg-card hover:border-border/70 active:scale-[0.97] overflow-hidden"
+                className="group/recent relative flex items-center gap-2.5 rounded-xl border border-border/35 bg-card p-1.5 text-left transition-all hover:border-border/70 active:scale-[0.97] overflow-hidden"
               >
                 <button
                   type="button"
@@ -717,7 +744,7 @@ export function HomePage({
                 key={track.id}
                 artworkUrl={track.artworkUrl}
                 title={track.title}
-                subtitleContent={<ArtistLinks artists={track.artists} fallback={track.artist} />}
+                subtitleContent={<ArtistLinks artists={track.artists} fallback={track.artist} interactive={false} />}
                 onContextMenu={(event) => openTrackMenu(event, track)}
                 onClick={() => playTrack(track, suggestions)}
               />
@@ -742,7 +769,7 @@ export function HomePage({
                 key={track.id}
                 artworkUrl={track.artworkUrl}
                 title={track.title}
-                subtitleContent={<ArtistLinks artists={track.artists} fallback={track.artist} />}
+                subtitleContent={<ArtistLinks artists={track.artists} fallback={track.artist} interactive={false} />}
                 onContextMenu={(event) => openTrackMenu(event, track)}
                 onClick={() => playTrack(track, recentPlays)}
               />

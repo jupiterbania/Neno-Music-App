@@ -38,15 +38,15 @@ const MiniPlayerProgress = memo(function MiniPlayerProgress({ trackId }: { track
       if (dur > 0) {
         setPercent(Math.min(100, Math.max(0, (curr / dur) * 100)));
       }
-    }, 400);
+    }, 300);
 
     return () => clearInterval(interval);
   }, [trackId]);
 
   return (
-    <div className="h-[2px] w-full bg-white/10 overflow-hidden rounded-t-2xl">
+    <div className="h-[2.5px] w-full bg-white/10 overflow-hidden rounded-t-2xl">
       <div
-        className="h-full bg-primary transition-all duration-300 ease-out"
+        className="h-full bg-gradient-to-r from-red-500 to-rose-400 transition-all duration-300 ease-out"
         style={{ width: `${percent}%` }}
       />
     </div>
@@ -124,17 +124,19 @@ export function MobilePlayerBar({ onOpenNowPlaying, className }: MobilePlayerBar
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ y: 24, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 24, opacity: 0 }}
-        transition={{ duration: 0.22, ease: "easeOut" }}
+        layout
+        initial={{ y: 28, opacity: 0, scale: 0.96 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 28, opacity: 0, scale: 0.96 }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 420, damping: 28 }}
         onClick={onOpenNowPlaying}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         className={cn(
-          "relative flex w-full flex-col overflow-hidden rounded-2xl",
-          "bg-[#1c1d16] border border-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.6)]",
-          "active:scale-[0.99] transition-transform duration-100 cursor-pointer select-none",
+          "relative flex w-full flex-col overflow-hidden rounded-2xl transform-gpu",
+          "bg-[#1c1d22]/95 border border-white/15 shadow-[0_12px_36px_rgba(0,0,0,0.65)]",
+          "cursor-pointer select-none backdrop-blur-2xl",
           className,
         )}
       >
@@ -150,39 +152,57 @@ export function MobilePlayerBar({ onOpenNowPlaying, className }: MobilePlayerBar
               size={48}
               className="size-full object-cover"
             />
+            {isPlaying && (
+              <span className="absolute inset-0 bg-red-500/10 animate-pulse pointer-events-none" />
+            )}
           </div>
 
-          {/* Title & Artist - Cleanly Structured & Truncated */}
-          <div className="flex min-w-0 flex-1 flex-col justify-center">
-            <span className="truncate text-sm font-semibold tracking-tight text-white leading-tight">
-              {currentTrack.title || "Unknown Track"}
-            </span>
-            <span className="truncate text-xs font-normal text-white/65 leading-normal mt-0.5">
-              {currentTrack.artist || "Unknown Artist"}
-            </span>
+          {/* Title & Artist - Cleanly Structured & Animated */}
+          <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentTrack.id}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.2 }}
+                className="flex flex-col truncate"
+              >
+                <span className="truncate text-sm font-semibold tracking-tight text-white leading-tight">
+                  {currentTrack.title || "Unknown Track"}
+                </span>
+                <span className="truncate text-xs font-normal text-white/65 leading-normal mt-0.5">
+                  {currentTrack.artist || "Unknown Artist"}
+                </span>
+              </motion.div>
+            </AnimatePresence>
           </div>
 
-          {/* Action Icons - Structured with uniform 40px touch targets */}
+          {/* Action Icons - Structured with uniform touch targets & spring feedback */}
           <div className="flex items-center gap-1 shrink-0">
             {/* Like button */}
-            <button
+            <motion.button
               type="button"
               onClick={handleToggleLike}
-              className="flex size-10 items-center justify-center text-white/70 active:scale-90 hover:text-white transition-transform"
+              whileTap={{ scale: 0.82 }}
+              transition={{ type: "spring", stiffness: 500, damping: 20 }}
+              className="flex size-10 items-center justify-center text-white/70 hover:text-white transition-colors"
               aria-label={isLiked ? "Unlike track" : "Like track"}
             >
               {isLiked ? (
-                <HeartActiveIcon size={20} className="text-red-500 scale-110" />
+                <HeartActiveIcon size={20} className="text-red-500 scale-110 drop-shadow-[0_2px_8px_rgba(239,68,68,0.5)]" />
               ) : (
                 <HeartIcon size={20} />
               )}
-            </button>
+            </motion.button>
 
             {/* Play / Pause Circular Button */}
-            <button
+            <motion.button
               type="button"
               onClick={handlePlayPause}
-              className="flex size-10 items-center justify-center rounded-full bg-white text-black shadow-md active:scale-90 transition-transform hover:opacity-90"
+              whileTap={{ scale: 0.84 }}
+              transition={{ type: "spring", stiffness: 500, damping: 20 }}
+              className="flex size-10 items-center justify-center rounded-full bg-white text-black shadow-lg hover:opacity-90 transition-opacity"
               aria-label={isPlaying ? "Pause" : "Play"}
             >
               {isLoading ? (
@@ -192,17 +212,19 @@ export function MobilePlayerBar({ onOpenNowPlaying, className }: MobilePlayerBar
               ) : (
                 <PlayActiveIcon size={18} className="translate-x-0.5" />
               )}
-            </button>
+            </motion.button>
 
             {/* Skip Next Button */}
-            <button
+            <motion.button
               type="button"
               onClick={handleNext}
-              className="flex size-10 items-center justify-center text-white/75 active:scale-90 hover:text-white transition-transform"
+              whileTap={{ scale: 0.82 }}
+              transition={{ type: "spring", stiffness: 500, damping: 20 }}
+              className="flex size-10 items-center justify-center text-white/75 hover:text-white transition-colors"
               aria-label="Next track"
             >
               <SkipNextIcon size={22} />
-            </button>
+            </motion.button>
           </div>
         </div>
       </motion.div>

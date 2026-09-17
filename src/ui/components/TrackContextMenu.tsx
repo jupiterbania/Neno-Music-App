@@ -8,13 +8,14 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { AlbumIcon, CheckIcon, CloseIcon, CompassIcon, DownloadIcon, HeartActiveIcon, HeartIcon, LinkIcon, ListIcon, PencilIcon, PlaylistAddIcon, PlaylistIcon, RadioIcon, SearchIcon, SkipNextIcon, TrashIcon } from "@/ui/icons";
+import { AlbumIcon, CheckIcon, CloseIcon, CompassIcon, DownloadIcon, HeartActiveIcon, HeartIcon, ListIcon, PencilIcon, PlaylistAddIcon, PlaylistIcon, RadioIcon, SearchIcon, ShareIcon, SkipNextIcon, TrashIcon } from "@/ui/icons";
 import type { Playlist, Track, TrackRating } from "../../datasource/types";
 import {
   TrackContextMenuContext,
   type TrackContextMenuValue,
 } from "./trackContextMenuContext";
 import type { LibraryController } from "../../player/LibraryController";
+import { shareContent } from "../../internal/share";
 import { logInternalError } from "../../internal/logging";
 import {
   cancelDownload,
@@ -316,17 +317,18 @@ export function TrackContextMenuProvider({
     void playerController.playTrackById(track.id, [track], true);
   };
 
-  const copyLink = async () => {
+  const handleShare = async () => {
     if (!track) return;
     const selectedTrack = track;
     setMenuPosition(null);
-    try {
-      await navigator.clipboard.writeText(
-        `https://music.youtube.com/watch?v=${encodeURIComponent(selectedTrack.id)}`,
-      );
+    const shareUrl = `https://music.youtube.com/watch?v=${encodeURIComponent(selectedTrack.id)}`;
+    const result = await shareContent({
+      title: selectedTrack.title,
+      text: `Listening to ${selectedTrack.title} by ${selectedTrack.artist}`,
+      url: shareUrl,
+    });
+    if (result.copied) {
       showToast("Link copied");
-    } catch {
-      showToast("Unable to copy the link.", 4000);
     }
   };
 
@@ -686,9 +688,9 @@ export function TrackContextMenuProvider({
             </button>
           )}
           {canCopySelectedTrackLink && (
-            <button type="button" role="menuitem" className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" onClick={() => void copyLink()}>
-              <LinkIcon size={18} aria-hidden="true" />
-              <span className="flex-1">Copy link</span>
+            <button type="button" role="menuitem" className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" onClick={() => void handleShare()}>
+              <ShareIcon size={18} aria-hidden="true" />
+              <span className="flex-1">Share</span>
             </button>
           )}
           {canRemoveSelectedTrackFromPlaylist && (

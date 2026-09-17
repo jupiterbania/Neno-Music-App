@@ -121,7 +121,7 @@ html[data-theme="dark"] {
  * every colour now comes from the @theme block above.
  */
 :root {
-  --titlebar-height: 44px;
+  --titlebar-height: 52px;
   --sidebar-width: 220px;
 
   /* macOS-style window rounding. The window itself is transparent; the app root paints

@@ -26,6 +26,7 @@ import { saveMiniPlayerPosition, useMiniPlayerHoverAction } from "../../settings
 import { isLinux, isMacOS, isWindows } from "../../platform";
 import { Marquee } from "@/components/motion/marquee";
 import { TrackArtwork } from "../TrackArtwork";
+import { getArtworkUrlCandidates } from "../../../datasource/youtube/artwork";
 
 interface PlayerSync {
   status: string;
@@ -522,25 +523,24 @@ export default function MiniPlayer() {
   }, []);
 
   const handleRestore = async () => {
-    await emit("mini-player:restore-main");
-
-    /*
-     * Best-effort, and deliberately not awaited into the restore below.
-     *
-     * The main window answers that event by *destroying* this window rather than hiding it,
-     * so a hide issued here can land after the window is already gone and reject. Awaited,
-     * that rejection aborts the rest of this function and leaves the main window in the
-     * background — the click appears to do nothing. Kept only for the instant visual
-     * feedback while the destroy makes its way across.
-     */
+    /* Instantly hide for immediate visual feedback */
     void win.hide().catch(() => {});
 
-    const mainWin = await WebviewWindow.getByLabel("main");
-    if (mainWin) {
-      await mainWin.show();
-      await mainWin.unminimize();
-      await mainWin.setFocus();
-    }
+    /* Dispatch restore signal while bringing main window to front in parallel */
+    const emitPromise = emit("mini-player:restore-main");
+
+    try {
+      const mainWin = await WebviewWindow.getByLabel("main");
+      if (mainWin) {
+        await Promise.all([
+          mainWin.show(),
+          mainWin.unminimize(),
+          mainWin.setFocus(),
+        ]);
+      }
+    } catch (_) {}
+
+    await emitPromise.catch(() => {});
   };
 
   const stopAlbumArtDrag = async (restoreIfClick: boolean) => {
@@ -872,6 +872,12 @@ export default function MiniPlayer() {
   const isPlaying = playerState.status === "playing";
   const isLoading = playerState.status === "loading";
   const artworkUrl = playerState.artworkUrl ?? cachedArtwork;
+  // Prefer the highest-resolution candidate (maxresdefault for YouTube, large music cover variant
+  // for yt3.ggpht.com). getArtworkUrlCandidates returns them in quality-descending order;
+  // the first entry is the best one. Falls back to artworkUrl when the list is empty.
+  const hdArtworkUrl = artworkUrl
+    ? (getArtworkUrlCandidates(artworkUrl)[0] ?? artworkUrl)
+    : null;
   const displayedVolume = volumePreview ?? (volumeState.muted ? 0 : volumeState.volume);
   const displayedTime = seekPreviewTime ?? timeState.currentTime;
   const sliderValue = hoverAction === "volume" ? displayedVolume : displayedTime;
@@ -932,11 +938,11 @@ export default function MiniPlayer() {
           takes on a different mood per track — which is the thing a flat neutral pill can
           never do. Deliberately weak so white text keeps its contrast.
         */}
-        {artworkUrl ? (
+        {hdArtworkUrl ? (
           <span
-            key={artworkUrl}
+            key={hdArtworkUrl}
             className="pointer-events-none absolute inset-0 -z-10 scale-150 bg-cover bg-center opacity-30 blur-2xl"
-            style={{ backgroundImage: `url("${artworkUrl}")` }}
+            style={{ backgroundImage: `url("${hdArtworkUrl}")` }}
             aria-hidden="true"
           />
         ) : null}
@@ -978,7 +984,7 @@ export default function MiniPlayer() {
               aria-hidden="true"
             />
             <TrackArtwork
-              artworkUrl={artworkUrl ?? undefined}
+              artworkUrl={hdArtworkUrl ?? undefined}
               className={cn(
                 "relative size-[34px] shrink-0 rounded-full bg-neutral-800 transition-transform duration-300",
                 isPlaying && "motion-safe:animate-[spin_12s_linear_infinite]",
@@ -986,9 +992,9 @@ export default function MiniPlayer() {
               )}
               iconSize={15}
               loading="eager"
-              /* 34px circle. Same omission as MediaHeader had: without it this asked for the
-                 full-size cover, in the window whose whole reason to exist is being small. */
-              size={34}
+              /* 34px circle — but we deliberately omit `size` here so the full HD candidate
+                 list is used. The HD first-candidate (maxresdefault / large music cover) is
+                 cached by the browser after the first load, so the extra bytes are a one-off. */
             />
             <span
               className="pointer-events-none absolute inset-0 grid place-items-center rounded-full bg-black/60 opacity-0 transition-opacity duration-200 group-hover/art:opacity-100"

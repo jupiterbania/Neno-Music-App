@@ -94,7 +94,7 @@ export const AlbumCard = memo(function AlbumCard({
         </div>
       </TiltCard>
 
-      <div className="flex min-w-0 flex-col gap-0.5 px-0.5">
+      <div className="flex min-w-0 flex-col gap-0.5 px-0.5 pointer-events-none">
         {title && (
           <span className="line-clamp-2 text-xs sm:text-sm font-semibold tracking-tight text-foreground leading-snug">
             {title}

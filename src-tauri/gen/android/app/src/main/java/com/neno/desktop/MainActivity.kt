@@ -1,6 +1,8 @@
 package com.neno.desktop
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
@@ -29,6 +31,39 @@ class MainActivity : TauriActivity() {
 
     var targetWebView: WebView? = null
         private set
+
+    /**
+     * Background keepalive for the WebView's evaluateJavascript queue.
+     *
+     * When the Activity is stopped (screen locked / app minimised), Android defers
+     * evaluateJavascript calls even though our onStop/onPause overrides call
+     * webView.onResume() and resumeTimers(). Tauri uses evaluateJavascript to emit
+     * events from Rust to JS — including `native-audio-ended` — so deferred calls
+     * prevent the JS player from advancing the queue until the app is re-opened,
+     * producing the symptom where the next song only starts on app open.
+     *
+     * Posting a no-op eval every 500 ms keeps the WebView message loop active and
+     * ensures any Tauri events queued by Rust are processed promptly in background.
+     */
+    private val backgroundKeepaliveHandler = Handler(Looper.getMainLooper())
+    private val backgroundKeepaliveRunnable = object : Runnable {
+        override fun run() {
+            targetWebView?.evaluateJavascript("void 0;", null)
+            backgroundKeepaliveHandler.postDelayed(this, 500)
+        }
+    }
+    private var backgroundKeepaliveActive = false
+
+    private fun startBackgroundKeepalive() {
+        if (backgroundKeepaliveActive) return
+        backgroundKeepaliveActive = true
+        backgroundKeepaliveHandler.post(backgroundKeepaliveRunnable)
+    }
+
+    private fun stopBackgroundKeepalive() {
+        backgroundKeepaliveActive = false
+        backgroundKeepaliveHandler.removeCallbacks(backgroundKeepaliveRunnable)
+    }
 
     private external fun initAndroidContext(context: android.content.Context)
 
@@ -81,6 +116,9 @@ class MainActivity : TauriActivity() {
 
     override fun onResume() {
         super.onResume()
+        // App returned to foreground: stop the background keepalive — the foreground
+        // rendering loop handles evaluateJavascript calls normally from here.
+        stopBackgroundKeepalive()
         setupWebView()
         targetWebView?.resumeTimers()
     }
@@ -90,6 +128,9 @@ class MainActivity : TauriActivity() {
         // Counteract WryActivity calling webView.onPause() which stops media and JS
         targetWebView?.onResume()
         targetWebView?.resumeTimers()
+        // Start the keepalive so Tauri's JS events (e.g. native-audio-ended) are
+        // flushed promptly even while the screen is off or the app is minimised.
+        startBackgroundKeepalive()
     }
 
     override fun onStop() {
@@ -97,6 +138,9 @@ class MainActivity : TauriActivity() {
         // Keep webview media playback engine active when screen locks or app minimizes
         targetWebView?.onResume()
         targetWebView?.resumeTimers()
+        // Keepalive was already started in onPause; ensure it's running here too in
+        // case onStop is reached without a prior onPause (rare but possible).
+        startBackgroundKeepalive()
     }
 
     @Deprecated("Deprecated in Java")
@@ -189,6 +233,7 @@ class MainActivity : TauriActivity() {
     }
 
     override fun onDestroy() {
+        stopBackgroundKeepalive()
         unregisterMediaControlReceiver()
         if (instance == this) {
             instance = null
@@ -236,6 +281,30 @@ class MainActivity : TauriActivity() {
         @JavascriptInterface
         fun signOutGoogle() {
             activity.clearGoogleSession()
+        }
+
+        @JavascriptInterface
+        fun shareText(title: String, text: String, url: String) {
+            activity.runOnUiThread {
+                try {
+                    val shareBody = if (text.isNotBlank() && url.isNotBlank()) {
+                        if (text.contains(url)) text else "$text\n$url"
+                    } else if (url.isNotBlank()) {
+                        url
+                    } else {
+                        text
+                    }
+                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_SUBJECT, title)
+                        putExtra(android.content.Intent.EXTRA_TEXT, shareBody)
+                    }
+                    val chooser = android.content.Intent.createChooser(intent, if (title.isNotBlank()) title else "Share via")
+                    activity.startActivity(chooser)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         }
     }
 

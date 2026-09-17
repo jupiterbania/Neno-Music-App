@@ -1,32 +1,19 @@
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
-import introVideo from "../../../assets/img/download.mp4";
+import { YouTubeMusicIcon } from "./YouTubeConnectionPopup";
 
 /*
  * The accent bloom, as a gradient rather than a blurred circle.
- *
- * It was a 420px solid disc with `blur-[120px]`. A filter that large is not cheap the way a
- * background is: the element becomes its own compositor layer, and Chromium has to allocate an
- * intermediate texture expanded by roughly three times the radius on every side — a 420px disc
- * rasterising into something past 1100px square, in multiple passes, on the startup screen
- * where the GPU process is still warming up.
- *
- * A blurred solid circle is a radial gradient. This one is drawn straight into the raster pass:
- * no filter, no layer, no intermediate. The box is grown to 660px because the gradient has to
- * cover the area the blur used to bleed into.
  */
 const LOADING_GLOW =
-  "radial-gradient(circle, color-mix(in oklab, var(--color-primary) 7%, transparent) 0%, transparent 70%)";
+  "radial-gradient(circle, color-mix(in oklab, var(--color-primary) 14%, transparent) 0%, color-mix(in oklab, #ff0000 8%, transparent) 40%, transparent 70%)";
 
 const LOADING_LINES = [
-  " Finding your rhythm...",
-  " Loading your library...",
-  " Tuning the soundstage...",
-  " Warming up the strings...",
-  " Counting in...",
-  " Preparing your session...",
-  " Syncing your music...",
-  " Building today's vibe...",
+  "Connecting to YouTube Music...",
+  "Tuning the soundstage...",
+  "Syncing your music engine...",
+  "Loading high-fidelity audio...",
+  "Building today's vibe...",
 ];
 
 interface AppLoadingScreenProps {
@@ -39,52 +26,63 @@ export function AppLoadingScreen({ isLeaving }: AppLoadingScreenProps) {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[100] grid place-items-center rounded-3xl bg-background transition-opacity duration-200",
-        isLeaving ? "pointer-events-none opacity-0" : "opacity-100",
+        "fixed inset-0 z-[100] grid place-items-center bg-background transition-all duration-300",
+        isLeaving ? "pointer-events-none opacity-0 scale-105" : "opacity-100 scale-100",
       )}
       role="status"
       aria-label="Loading"
       aria-live="polite"
     >
-      
-      {/* Accent bloom behind the mark. */}
+      {/* Accent bloom behind the mark */}
       <div
-        className="pointer-events-none absolute left-1/2 top-1/2 size-[660px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+        className="pointer-events-none absolute left-1/2 top-1/2 size-[660px] -translate-x-1/2 -translate-y-1/2 rounded-full animate-pulse"
         style={{ background: LOADING_GLOW }}
       />
 
-      <div className="relative flex flex-col items-center gap-5">
-{/*         <motion.img
-          initial={{ opacity: 0, scale: 0.92 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: "spring", stiffness: 260, damping: 24 }}
-          className="size-20 rounded-2xl"
-          src={appIcon}
-          alt=""
-        />  */}
+      <div className="relative flex flex-col items-center gap-6">
+        {/* Glowing emblem container with pulsating ring */}
+        <div className="relative flex items-center justify-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: [0.3, 0.8, 0.3], scale: [0.95, 1.2, 0.95] }}
+            transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
+            className="absolute size-28 rounded-full bg-red-600/30 blur-xl"
+          />
 
-<motion.video
-  initial={{ opacity: 0, scale: 0.92 }}
-  animate={{ opacity: 1, scale: 1 }}
-  transition={{ type: "spring", stiffness: 260, damping: 24 }}
-  /* No `backdrop-blur`: this is an opaque, object-cover video — the filter was blurring a
-     backdrop that the video itself completely covers, once per video frame, during startup. */
-  className="size-18 drop-shadow-2xl rounded-full object-cover
-             [mask-image:radial-gradient(circle_at_center,black_58%,transparent_100%)]
-             [-webkit-mask-image:radial-gradient(circle_at_center,black_58%,transparent_100%)]"
-  autoPlay
-  muted
-  loop
-  playsInline
-  preload="auto"
->
-  <source src={introVideo} type="video/mp4" />
-</motion.video>
- 
-      <div className="flex items-end gap-4">
-       {/*  <AudioLoader /> */}  <strong className="text-sm font-medium text-foreground">{loadingLine}</strong>
-      </div>
-        
+          <motion.div
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 22 }}
+            className="relative flex size-20 items-center justify-center rounded-3xl bg-gradient-to-b from-[#222]/90 to-[#111]/95 border border-white/15 shadow-[0_10px_35px_rgba(255,0,0,0.25)] backdrop-blur-xl"
+          >
+            <YouTubeMusicIcon size={44} className="drop-shadow-lg" />
+            <span className="absolute -inset-1 rounded-3xl border border-red-500/30 animate-pulse pointer-events-none" />
+          </motion.div>
+        </div>
+
+        {/* Live Loading Badge */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.3 }}
+          className="flex flex-col items-center gap-2"
+        >
+          <div className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-3.5 py-1 backdrop-blur-md">
+            <span className="relative flex size-2">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex size-2 rounded-full bg-red-500" />
+            </span>
+            <span className="text-xs font-semibold text-foreground tracking-tight">
+              {loadingLine}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-widest text-muted-foreground/70">
+            <span>Neno</span>
+            <span>•</span>
+            <span className="text-red-500">YouTube Engine</span>
+          </div>
+        </motion.div>
       </div>
     </div>
   );

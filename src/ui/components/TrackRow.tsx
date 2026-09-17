@@ -18,7 +18,7 @@ import {
   useOfflineState,
 } from "../../player/offlineStore";
 import type { Track, TrackRating } from "../../datasource/types";
-import { libraryController, useLibraryState } from "../../player/playerStore";
+import { libraryController, playerController, useLibraryState } from "../../player/playerStore";
 import { useTrackContextMenu } from "./TrackContextMenu";
 import { ArtistLinks } from "./ArtistLinks";
 import { TrackArtwork } from "./TrackArtwork";
@@ -73,6 +73,10 @@ interface TrackRowProps extends PassthroughButtonProps {
   className?: string;
   /** Rendered inside the row: drag indicators and the like. */
   children?: ReactNode;
+  /** Hides the row number (#1, #2…) while keeping the play/visualizer slot. */
+  hideIndex?: boolean;
+  /** Whether the artist name link is clickable inside the row (default: true). */
+  interactiveArtist?: boolean;
 }
 
 /**
@@ -369,6 +373,8 @@ export const TrackRow = memo(function TrackRow({
   trailing,
   className,
   children,
+  hideIndex = false,
+  interactiveArtist = true,
   ...buttonProps
 }: TrackRowProps) {
   /*
@@ -419,27 +425,16 @@ export const TrackRow = memo(function TrackRow({
       {...buttonProps}
       type="button"
       onClick={handleSelect}
+      onMouseEnter={() => playerController.warmTrack(track)}
+      onTouchStart={() => playerController.warmTrack(track)}
       /* Kept conditional: whether the prop was supplied still decides whether a handler is
          attached at all, only its identity is ignored. */
       onContextMenu={onContextMenu ? handleContextMenu : undefined}
       aria-current={isCurrent ? "true" : undefined}
       className={cn(
-        "group/row relative flex w-full items-center gap-3  px-2 py-1.5 text-left",
-        "transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2",
-        "focus-visible:ring-inset focus-visible:ring-ring",
-        /*
-         * Off-screen rows skip layout, paint and compositing.
-         *
-         * These lists are not windowed — a 500-track playlist really does build 500 rows of
-         * ~20 elements each — and windowing them properly fights both the drag-reorder and the
-         * shift-range selection, which need the full index space. This is the platform doing
-         * the same job for one line: the nodes stay, the rendering work does not.
-         *
-         * `auto 52px` is the row's height (40px artwork + `py-1.5`); the `auto` keyword means
-         * the browser prefers the size it last actually measured, so the guess only matters for
-         * rows that have never been on screen. Width is untouched by the containment because
-         * `w-full` states it outright rather than deriving it from content.
-         */
+        "group/row relative flex w-full items-center gap-3 px-2 py-1.5 text-left rounded-xl",
+        "transition-all duration-150 hover:bg-card active:scale-[0.985] active:bg-primary/10 focus-visible:outline-none focus-visible:ring-2",
+        "focus-visible:ring-inset focus-visible:ring-ring select-none",
         "[content-visibility:auto] [contain-intrinsic-size:auto_52px]",
         isCurrent && "bg-primary/5",
         isSelected && "bg-primary/10",
@@ -462,14 +457,17 @@ export const TrackRow = memo(function TrackRow({
           gives way to a play glyph on hover — and to a level meter once this row is the one
           playing. All three share the slot, so the row never reflows between states. */
       <span className="relative w-6 shrink-0 text-center text-xs tabular-nums text-muted-foreground">
-        <span
-          className={cn(
-            "transition-opacity",
-            isCurrent ? "opacity-0" : "group-hover/row:opacity-0",
-          )}
-        >
-          {index + 1}
-        </span>
+        {/* Number — hidden via hideIndex but the slot still exists for the play indicator */}
+        {!hideIndex && (
+          <span
+            className={cn(
+              "transition-opacity",
+              isCurrent ? "opacity-0" : "group-hover/row:opacity-0",
+            )}
+          >
+            {index + 1}
+          </span>
+        )}
 
         {/*
           On a list that supports multi-select, hover offers the checkbox instead of the play
@@ -541,6 +539,7 @@ export const TrackRow = memo(function TrackRow({
           artists={track.artists}
           fallback={track.artist}
           suppressArtistId={suppressArtistId}
+          interactive={interactiveArtist}
         />
       </span>
 

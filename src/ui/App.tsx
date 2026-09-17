@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Album, Artist, Playlist, SearchResults, Track } from "../datasource/types";
@@ -69,9 +69,9 @@ import {
 import { clearAppSession, loadAppSession, saveAppSession } from "../player/appSession";
 import { useMediaSession } from "../player/useMediaSession";
 import { useAndroidMediaBridge } from "../player/androidMediaBridge";
-import { LastFmService } from "../player/LastFm";
 import { playerUIStore, usePlayerUIState } from "./stores/playerUIStore";
 import { AppLoadingScreen } from "./components/AppLoadingScreen";
+import { YouTubeConnectionPopup } from "./components/YouTubeConnectionPopup";
 import { AuthOverlay } from "./components/AuthOverlay";
 import { UpdateToast } from "./components/UpdateToast";
 import { ReleaseNoteDialog } from "./components/ReleaseNoteDialog";
@@ -124,7 +124,6 @@ import {
   useKeyboardShortcuts,
   type KeyboardShortcutAction,
 } from "./settings/keyboardShortcuts";
-import { useLastFmScrobblingEnabled } from "./settings/lastfm";
 import { persistMainWindowGeometry } from "./settings/mainWindowGeometry";
 import { hydratePlaybackSettings } from "../player/playbackSettings";
 const restoredSession = loadAppSession();
@@ -312,7 +311,6 @@ export default function App() {
   const miniPlayerEnabled = useMiniPlayerEnabled();
   const miniPlayerWindowLive = useMiniPlayerWindowLive();
   const keyboardShortcuts = useKeyboardShortcuts();
-  const lastFmScrobblingEnabled = useLastFmScrobblingEnabled();
   // The stylesheet kills CSS animation via !important; this is the JS half. Motion writes
   // inline styles, so no stylesheet can reach it — and its own `useReducedMotion` reads the
   // OS media query alone, which is why this is the app's hook and not that one.
@@ -673,34 +671,6 @@ export default function App() {
   }, []);
 
 
-  useEffect(() => {
-    const syncLastFm = () => {
-      LastFmService.updatePlayback({
-        track: playerState.currentTrack,
-        status: playerState.status,
-        currentTime: playerController.getCurrentTime(),
-        duration: playerController.getDuration(),
-        enabled: lastFmScrobblingEnabled,
-      });
-    };
-
-    /*
-     * The single call is the one that matters on every other status: it is what tells the
-     * scrobbler a track was paused, changed or stopped. The interval exists only to watch a
-     * playing track cross its scrobble threshold, so it has nothing to do while the position
-     * is not moving — and it was running once a second for the whole session regardless, with
-     * scrobbling switched off, with nothing loaded, engine reads and all.
-     */
-    syncLastFm();
-    if (!lastFmScrobblingEnabled || playerState.status !== "playing") return;
-
-    const intervalId = window.setInterval(syncLastFm, 1000);
-    return () => window.clearInterval(intervalId);
-  }, [
-    lastFmScrobblingEnabled,
-    playerState.currentTrack,
-    playerState.status,
-  ]);
 
   const activeViewKey = [
     activeTabId,
@@ -2034,6 +2004,16 @@ export default function App() {
     return () => { cleanup.then(fn => fn()); };
   }, [isMobile]);
 
+  const homeDestinations = useMemo(
+    () => ({
+      onOpenLibrary: handleOpenLibrary,
+      onOpenBrowse: () => handleOpenBrowse(),
+      onOpenHistory: handleOpenHistory,
+      onOpenDownloads: () => handleOpenBrowse("downloads"),
+    }),
+    [handleOpenLibrary, handleOpenBrowse, handleOpenHistory],
+  );
+
   return (
     <MotionConfig reducedMotion={reduceMotion ? "always" : "user"}>
     <ArtistNavigationProvider onNavigate={handleNavigateArtist}>
@@ -2160,11 +2140,16 @@ export default function App() {
           ) : (
           <motion.div
             key={activeViewKey}
-            className="min-h-0 flex-1"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="min-h-0 flex-1 transform-gpu"
+            initial={{ opacity: 0, y: 8, scale: 0.99 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.99 }}
+            transition={{
+              type: "spring",
+              stiffness: 340,
+              damping: 32,
+              mass: 0.6,
+            }}
           >
             {activeTab?.view === "home" && (
               <HomePage
@@ -2174,16 +2159,11 @@ export default function App() {
                 libraryState={libraryState}
                 searchController={searchController}
                 onSignIn={handleSignIn}
-                destinations={{
-                  onOpenLibrary: handleOpenLibrary,
-                  onOpenBrowse: () => handleOpenBrowse(),
-                  onOpenHistory: handleOpenHistory,
-                  onOpenDownloads: () => handleOpenBrowse("downloads"),
-                }}
+                destinations={homeDestinations}
                 onOpenSearch={() => setIsSearchOpen(true)}
                 onOpenSettings={handleOpenSettings}
                 onOpenAlbum={handleNavigateAlbum}
-                onOpenArtist={(artist) => handleNavigateArtist(artist)}
+                onOpenArtist={handleNavigateArtist}
                 onOpenPlaylist={handleNavigatePlaylist}
               />
             )}
@@ -2322,6 +2302,7 @@ export default function App() {
             <MobileNowPlayingModal
               isOpen={isMobileNowPlayingOpen}
               onClose={() => setIsMobileNowPlayingOpen(false)}
+              onOpenArtist={(artist) => handleNavigateArtist(artist)}
             />
           </>
         ) : (
@@ -2363,6 +2344,9 @@ export default function App() {
       />
       {loadingScreenState !== "hidden" && (
         <AppLoadingScreen isLeaving={loadingScreenState === "leaving"} />
+      )}
+      {loadingScreenState === "hidden" && (
+        <YouTubeConnectionPopup onOpenSettings={handleOpenSettings} />
       )}
       {showKeychainNotice ? (
         <KeychainNotice onContinue={handleKeychainNoticeContinue} />

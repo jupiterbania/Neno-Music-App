@@ -19,6 +19,7 @@ import {
   shallowEqual,
   usePlayerSelector,
 } from "./playerStore";
+import { getArtworkUrlCandidates } from "../datasource/youtube/artwork";
 import { useEffect, useRef } from "react";
 
 // Action strings mirrored from MediaPlaybackService.kt companion object
@@ -145,15 +146,18 @@ export function useAndroidMediaBridge(): void {
       return;
     }
 
-    const isPlaying = status === "playing" || status === "loading";
+    const isPlaying = status === "playing";
     const duration = Math.round(playerController.getDuration() || currentTrack.durationSec || 0);
     const position = Math.round(playerController.getCurrentTime() || 0);
+    const hdArtworkUrl = currentTrack.artworkUrl
+      ? (getArtworkUrlCandidates(currentTrack.artworkUrl, 1200)[0] ?? currentTrack.artworkUrl)
+      : null;
 
     void updateService(
       currentTrack.title ?? "Unknown Track",
       currentTrack.artist ?? "Unknown Artist",
       isPlaying,
-      currentTrack.artworkUrl ?? null,
+      hdArtworkUrl,
       duration,
       position,
     );
@@ -169,11 +173,14 @@ export function useAndroidMediaBridge(): void {
       if (!track) return;
       const duration = Math.round(playerController.getDuration() || track.durationSec || 0);
       const position = Math.round(playerController.getCurrentTime() || 0);
+      const hdArtworkUrl = track.artworkUrl
+        ? (getArtworkUrlCandidates(track.artworkUrl, 1200)[0] ?? track.artworkUrl)
+        : null;
       void updateService(
         track.title ?? "Unknown Track",
         track.artist ?? "Unknown Artist",
         true,
-        track.artworkUrl ?? null,
+        hdArtworkUrl,
         duration,
         position,
       );
@@ -184,11 +191,14 @@ export function useAndroidMediaBridge(): void {
       if (!track) return;
       const duration = Math.round(playerController.getDuration() || track.durationSec || 0);
       const position = Math.round(playerController.getCurrentTime() || 0);
+      const hdArtworkUrl = track.artworkUrl
+        ? (getArtworkUrlCandidates(track.artworkUrl, 1200)[0] ?? track.artworkUrl)
+        : null;
       void updateService(
         track.title ?? "Unknown Track",
         track.artist ?? "Unknown Artist",
         true,
-        track.artworkUrl ?? null,
+        hdArtworkUrl,
         duration,
         position,
       );

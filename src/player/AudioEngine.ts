@@ -56,6 +56,7 @@ declare global {
         ENDED: number;
         PLAYING: number;
         PAUSED: number;
+        BUFFERING: number;
         CUED: number;
       };
     };
@@ -193,7 +194,12 @@ function detectAudioMimeType(bytes: Uint8Array): string {
 function allowYouTubeIframePlayback(host: HTMLElement): void {
   const iframe = host.querySelector("iframe");
   if (!iframe) return;
-  iframe.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture");
+  iframe.setAttribute(
+    "allow",
+    "autoplay *; encrypted-media *; picture-in-picture *; clipboard-write *",
+  );
+  iframe.setAttribute("playsinline", "1");
+  iframe.setAttribute("webkit-playsinline", "1");
 }
 
 function loadYouTubeIframeApi(): Promise<void> {
@@ -371,24 +377,7 @@ export class AudioEngine {
     if (this.currentVideoId === videoId) return;
 
     this.currentVideoId = videoId;
-    // A previous track may already have left the player in CUED. Wait for the
-    // state event from this cue request instead of accepting that stale state.
-    const cued = this.waitForPlayerState(
-      [window.YT!.PlayerState.CUED],
-      15_000,
-      false,
-      videoId,
-    );
     player.cueVideoById(videoId);
-    try {
-      await cued;
-    } catch (error) {
-      if (requestId === this.loadRequestId && this.currentVideoId === videoId) {
-        this.currentVideoId = null;
-      }
-      throw error;
-    }
-    if (requestId !== this.loadRequestId || this.currentVideoId !== videoId) return;
     logInternalInfo("AudioEngine.loadTrack cued", { videoId });
   }
 
@@ -480,14 +469,16 @@ export class AudioEngine {
     player.setVolume(this.getOutputVolumePercent());
     const videoId = this.currentVideoId;
     const playing = this.waitForPlayerState(
-      [window.YT!.PlayerState.PLAYING],
+      [window.YT!.PlayerState.PLAYING, window.YT!.PlayerState.BUFFERING],
       15_000,
       true,
       videoId,
     );
     const playerState = player.getPlayerState();
+    const currentLoadedId = player.getVideoData().video_id;
     if (
-      playerState === window.YT!.PlayerState.CUED
+      currentLoadedId !== videoId
+      || playerState === window.YT!.PlayerState.CUED
       || playerState === window.YT!.PlayerState.UNSTARTED
     ) {
       logInternalInfo("AudioEngine.play starting cued YouTube video", {
@@ -1081,7 +1072,12 @@ export class AudioEngine {
      * perspective. Setting it to "anonymous" sends no credentials in the CORS preflight, which
      * is fine — the media server does not require any.
      */
-    (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+    const audioTyped = audio as HTMLAudioElement & {
+      playsInline?: boolean;
+      webkitPlaysInline?: boolean;
+    };
+    audioTyped.playsInline = true;
+    audioTyped.webkitPlaysInline = true;
     if (sourceUrl) audio.crossOrigin = "anonymous";
     audio.src = objectUrl;
     audio.addEventListener("ended", () => {
@@ -1337,18 +1333,14 @@ export class AudioEngine {
      */
     const host = document.createElement("div");
     host.style.position = "fixed";
-    /*
-     * Inset rather than flush to the corner: html/body/#root are transparent so the window's
-     * rounded corners cut out, which leaves a notch where a corner-pinned box would show
-     * through from behind the app rather than being covered by it.
-     */
-    host.style.right = "24px";
-    host.style.bottom = "24px";
+    host.style.right = "0px";
+    host.style.bottom = "0px";
     host.style.width = "200px";
     host.style.height = "200px";
-    host.style.opacity = "0.01";
+    host.style.opacity = "0.001";
     host.style.pointerEvents = "none";
-    host.style.zIndex = "-1";
+    host.style.zIndex = "0";
+    host.style.overflow = "hidden";
     const target = document.createElement("div");
     host.appendChild(target);
     document.body.appendChild(host);
@@ -1369,9 +1361,10 @@ export class AudioEngine {
           controls: 0,
           disablekb: 1,
           enablejsapi: 1,
+          fs: 0,
           origin: window.location.origin,
           playsinline: 1,
-          widget_referrer: "https://music.youtube.com/",
+          rel: 0,
         },
         events: {
           onReady: () => {

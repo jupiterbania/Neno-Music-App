@@ -324,7 +324,7 @@ export function LibraryPage({
   return (
     <div className="flex flex-col gap-5 pb-44 md:pb-8">
       <header className="flex flex-col gap-5 pb-1">
-        <h1 className="text-4xl font-bold tracking-[-0.03em] text-foreground">Library</h1>
+        <h1 className="text-5xl font-bold tracking-[-0.03em] text-foreground">Library</h1>
 
         <div className="flex flex-wrap items-center gap-3">
           {/*
@@ -422,19 +422,6 @@ export function LibraryPage({
           <EmptyState noun="songs" query={query.trim()} onClearQuery={() => setQuery("")} />
         ) : (
           <div className="flex flex-col">
-            {/*
-              Widths mirror TrackRow's: w-6 index, size-10 artwork, then the flexible columns.
-              A list this long is scanned by column, and unlabelled columns are read twice.
-            */}
-            <div
-              className="flex items-center gap-3 px-2 pb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-              aria-hidden="true"
-            >
-              <span className="w-6 text-center shrink-0">#</span>
-              <span className="size-10 shrink-0" />
-              <span className="min-w-0 flex-1">Title</span>
-              <span className="hidden min-w-0 flex-1 basis-0 lg:block">Album</span>
-            </div>
             <div className="flex flex-col gap-0.5">
             {songs.map((track, index) => (
               <TrackRow
@@ -442,6 +429,7 @@ export function LibraryPage({
                 track={track}
                 index={index}
                 showAlbum
+                hideIndex
                 isCurrent={currentTrackId === track.id}
                 isPlaying={isPlaying && currentTrackId === track.id}
                 isSelected={selection.isSelected(track.id)}

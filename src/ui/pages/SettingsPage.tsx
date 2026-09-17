@@ -45,7 +45,6 @@ import {
   FolderIcon,
   FolderOpenIcon,
   KeyIcon,
-  LastFmIcon,
   LogFileIcon,
   LogoutIcon,
   LyricsIcon,
@@ -194,16 +193,9 @@ import {
   removeLocalPlaylistPath,
   subscribeToLocalPlaylists,
 } from "../../player/localPlaylists";
-import { LastFmService, type LastFmAuthStart, type LastFmSessionStatus } from "../../player/LastFm";
 import { DiscordRpcService } from "../../player/DiscordRPC";
 import { useDiscordPresenceEnabled } from "../settings/discord";
 import { useIsMobile } from "../hooks/useIsMobile";
-import {
-  readCachedLastFmUsername,
-  setLastFmScrobblingEnabled,
-  useLastFmScrobblingEnabled,
-  writeCachedLastFmUsername,
-} from "../settings/lastfm";
 import { isAndroid, isLinux, isTilingWindowManager, subscribeTilingWindowManager } from "../platform";
 import { AccountAvatar, AccountSwitcher, AddGoogleAccountButton, GoogleAccountSwitcher } from "../components/AccountSwitcher";
 import {
@@ -769,13 +761,6 @@ export function SettingsPage({
   const [localPlaylistPathInputs, setLocalPlaylistPathInputs] = useState<Record<string, string>>({});
   const [localPlaylistError, setLocalPlaylistError] = useState<string | null>(null);
   const [localPlaylistBrowsingId, setLocalPlaylistBrowsingId] = useState<string | null>(null);
-  const [lastFmSession, setLastFmSession] = useState<LastFmSessionStatus | null>(() => {
-    const cached = readCachedLastFmUsername();
-    return cached ? { username: cached } : null;
-  });
-  const [lastFmAuth, setLastFmAuth] = useState<LastFmAuthStart | null>(null);
-  const [lastFmBusy, setLastFmBusy] = useState(false);
-  const [lastFmError, setLastFmError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("about");
   const themePreference = useThemePreference();
   const [listeningShortcut, setListeningShortcut] = useState<KeyboardShortcutAction | null>(null);
@@ -829,7 +814,6 @@ export function SettingsPage({
     () => getOfflineMaxBytes() / 1024 ** 3,
   );
   const [clearingDownloads, setClearingDownloads] = useState(false);
-  const lastFmScrobblingEnabled = useLastFmScrobblingEnabled();
   const discordPresenceEnabled = useDiscordPresenceEnabled();
   const localPlaylists = useSyncExternalStore(
     subscribeToLocalPlaylists,
@@ -877,29 +861,7 @@ export function SettingsPage({
     };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    void LastFmService.getSession()
-      .then((session) => {
-        if (active) {
-          setLastFmSession(session);
-          writeCachedLastFmUsername(session?.username ?? null);
-        }
-      })
-      .catch((error) => {
-        if (active) {
-          const cached = readCachedLastFmUsername();
-          if (cached) {
-            setLastFmSession({ username: cached });
-          } else {
-            setLastFmError(error instanceof Error ? error.message : "Unable to load Last.fm connection.");
-          }
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+
 
   useEffect(() => {
     if (!resetSettingsConfirming) return undefined;
@@ -1045,50 +1007,7 @@ export function SettingsPage({
     }
   };
 
-  const handleStartLastFmAuth = async () => {
-    setLastFmBusy(true);
-    setLastFmError(null);
-    try {
-      const auth = await LastFmService.startAuth();
-      setLastFmAuth(auth);
-    } catch (error) {
-      setLastFmError(error instanceof Error ? error.message : "Unable to start Last.fm sign-in.");
-    } finally {
-      setLastFmBusy(false);
-    }
-  };
 
-  const handleFinishLastFmAuth = async () => {
-    if (!lastFmAuth) return;
-    setLastFmBusy(true);
-    setLastFmError(null);
-    try {
-      const session = await LastFmService.completeAuth(lastFmAuth.token);
-      setLastFmSession(session);
-      writeCachedLastFmUsername(session.username);
-      setLastFmAuth(null);
-      setLastFmScrobblingEnabled(true);
-    } catch (error) {
-      setLastFmError(error instanceof Error ? error.message : "Unable to finish Last.fm sign-in.");
-    } finally {
-      setLastFmBusy(false);
-    }
-  };
-
-  const handleDisconnectLastFm = async () => {
-    setLastFmBusy(true);
-    setLastFmError(null);
-    try {
-      await LastFmService.disconnect();
-      setLastFmSession(null);
-      writeCachedLastFmUsername(null);
-      setLastFmAuth(null);
-    } catch (error) {
-      setLastFmError(error instanceof Error ? error.message : "Unable to disconnect Last.fm.");
-    } finally {
-      setLastFmBusy(false);
-    }
-  };
 
   const handleAddLocalPlaylistPath = (playlistId: string) => {
     setLocalPlaylistError(null);
@@ -1393,87 +1312,7 @@ export function SettingsPage({
             )}
           </section>
 
-          <section className={SETTINGS_CARD} aria-labelledby="lastfm-settings-title">
-            <SettingsCardHeader
-              title="Last.fm"
-              titleId="lastfm-settings-title"
-              icon={<LastFmIcon size={18} aria-hidden="true" />}
-              description={
-                lastFmSession
-                  ? `Connected as ${lastFmSession.username}`
-                  : "Connect Last.fm to scrobble your listening history."
-              }
-              status={
-                <span className={lastFmSession ? "text-primary" : "text-muted-foreground"}>
-                  {lastFmSession ? "Connected" : "Signed out"}
-                </span>
-              }
-            />
 
-            <div className="flex flex-col gap-5">
-              <SettingToggle
-                title="Scrobble plays"
-                description="Send now playing updates and scrobbles after a track reaches the Last.fm listening threshold."
-                checked={lastFmSession ? lastFmScrobblingEnabled : false}
-                disabled={!lastFmSession}
-                onCheckedChange={setLastFmScrobblingEnabled}
-              />
-
-              <div className="flex items-center justify-between gap-3 rounded-xl bg-card/40 border border-border/40 px-3.5 py-3">
-                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-foreground">Account connection</span>
-                    {lastFmSession && (
-                      <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
-                        Connected
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs text-muted-foreground line-clamp-1">
-                    {lastFmAuth
-                      ? "Approve in browser, then tap Finish below."
-                      : lastFmSession
-                        ? `Connected as ${lastFmSession.username}`
-                        : "Connect your Last.fm account to scrobble."}
-                  </span>
-                </div>
-
-                {lastFmSession ? (
-                  <button
-                    className="shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground bg-card/80 hover:bg-card border border-border/50 transition-all active:scale-95 disabled:opacity-50 focus-visible:outline-none"
-                    type="button"
-                    disabled={lastFmBusy}
-                    onClick={() => void handleDisconnectLastFm()}
-                  >
-                    <LastFmIcon size={13} />
-                    <span>{lastFmBusy ? "Disconnecting…" : "Disconnect"}</span>
-                  </button>
-                ) : lastFmAuth ? (
-                  <button
-                    className="shrink-0 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition-all active:scale-95 hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none"
-                    type="button"
-                    disabled={lastFmBusy}
-                    onClick={() => void handleFinishLastFmAuth()}
-                  >
-                    <LastFmIcon size={13} />
-                    <span>{lastFmBusy ? "Finishing…" : "Finish"}</span>
-                  </button>
-                ) : (
-                  <button
-                    className="shrink-0 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition-all active:scale-95 hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none"
-                    type="button"
-                    disabled={lastFmBusy}
-                    onClick={() => void handleStartLastFmAuth()}
-                  >
-                    <LastFmIcon size={13} />
-                    <span>{lastFmBusy ? "Opening…" : "Connect Last.fm"}</span>
-                  </button>
-                )}
-              </div>
-
-              {lastFmError && <p className="text-sm text-destructive">{lastFmError}</p>}
-            </div>
-          </section>
 
           {!isMobile && (
             <section className={SETTINGS_CARD} aria-labelledby="discord-settings-title">
@@ -1761,12 +1600,12 @@ export function SettingsPage({
               )}
 
               {/* Controls */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-border/20">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">Limit</span>
-                  <span className="flex items-center gap-1 rounded-lg bg-card border border-border/40 px-2.5 py-1 text-xs text-foreground focus-within:border-primary/60">
+              <div className="flex items-center justify-between gap-2.5 pt-2 border-t border-border/20">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-medium text-muted-foreground shrink-0">Limit</span>
+                  <span className="flex items-center gap-1 rounded-lg bg-card border border-border/40 px-2 py-1 text-xs text-foreground focus-within:border-primary/60">
                     <input
-                      className="w-10 min-w-0 bg-transparent tabular-nums outline-none text-right font-medium"
+                      className="w-9 sm:w-10 min-w-0 bg-transparent tabular-nums outline-none text-right font-medium"
                       type="number"
                       min="0.25"
                       max="64"
@@ -1779,7 +1618,7 @@ export function SettingsPage({
                     <span className="text-muted-foreground text-[11px]">GB</span>
                   </span>
                   <button
-                    className="flex items-center justify-center rounded-lg bg-card border border-border/40 px-3 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                    className="flex items-center justify-center rounded-lg bg-card border border-border/40 px-2.5 sm:px-3 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50 shrink-0"
                     type="button"
                     disabled={cacheBusy}
                     onClick={() => void saveCacheSize()}
@@ -1789,7 +1628,7 @@ export function SettingsPage({
                 </div>
 
                 <button
-                  className="flex items-center gap-1.5 rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-1 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50 self-start sm:self-auto"
+                  className="flex items-center gap-1.5 rounded-lg bg-destructive/10 border border-destructive/20 px-2.5 sm:px-3 py-1 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50 shrink-0 ml-auto"
                   type="button"
                   disabled={cacheBusy}
                   onClick={() => void handleClearCache()}
@@ -1841,12 +1680,12 @@ export function SettingsPage({
               </div>
 
               {/* Controls */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-border/20">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">Limit</span>
-                  <span className="flex items-center gap-1 rounded-lg bg-card border border-border/40 px-2.5 py-1 text-xs text-foreground focus-within:border-primary/60">
+              <div className="flex items-center justify-between gap-2.5 pt-2 border-t border-border/20">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-medium text-muted-foreground shrink-0">Limit</span>
+                  <span className="flex items-center gap-1 rounded-lg bg-card border border-border/40 px-2 py-1 text-xs text-foreground focus-within:border-primary/60">
                     <input
-                      className="w-10 min-w-0 bg-transparent tabular-nums outline-none text-right font-medium"
+                      className="w-9 sm:w-10 min-w-0 bg-transparent tabular-nums outline-none text-right font-medium"
                       type="number"
                       min={1}
                       max={512}
@@ -1864,7 +1703,7 @@ export function SettingsPage({
                 </div>
 
                 <button
-                  className="flex items-center gap-1.5 rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-1 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50 self-start sm:self-auto"
+                  className="flex items-center gap-1.5 rounded-lg bg-destructive/10 border border-destructive/20 px-2.5 sm:px-3 py-1 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50 shrink-0 ml-auto"
                   type="button"
                   disabled={clearingDownloads || Object.keys(offlineState.entries).length === 0}
                   onClick={() => {
@@ -1887,18 +1726,26 @@ export function SettingsPage({
               description="Bitrate picked when a track is streamed or saved."
             />
 
-            <SettingRow
-              title="Streaming quality"
-              description="Applies to songs played over the network. Lower uses less data."
-            >
-              {(labelId) => (
+            <div className="flex flex-col gap-1.5 py-2.5 border-b border-border/20 last:border-b-0">
+              <div className="flex items-center justify-between gap-3 sm:gap-6">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span id="streaming-quality-label" className="text-sm font-medium text-foreground">
+                    Streaming quality
+                  </span>
+                  <span className="hidden sm:block text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                    Applies to songs played over the network. Lower uses less data.
+                  </span>
+                </div>
                 <Select
-                  className="w-full sm:w-52"
+                  className="w-40 sm:w-52 shrink-0"
                   value={streamingQuality}
                   onValueChange={(value) => setStreamingQuality(value as AudioQuality)}
                 >
-                  <SelectTrigger aria-labelledby={labelId}>
-                    <SelectValue />
+                  <SelectTrigger
+                    aria-labelledby="streaming-quality-label"
+                    className="h-9 rounded-full border border-white/10 bg-card/70 px-3 text-xs sm:text-sm hover:bg-card"
+                  >
+                    <SelectValue className="truncate whitespace-nowrap" />
                   </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(AUDIO_QUALITY_LABELS) as AudioQuality[]).map((quality) => (
@@ -1908,22 +1755,32 @@ export function SettingsPage({
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-            </SettingRow>
+              </div>
+              <p className="sm:hidden text-xs text-muted-foreground leading-relaxed">
+                Applies to songs played over the network. Lower uses less data.
+              </p>
+            </div>
 
-
-            <SettingRow
-              title="Download quality"
-              description="Applies to songs saved for offline. Higher sounds better and uses more disk."
-            >
-              {(labelId) => (
+            <div className="flex flex-col gap-1.5 py-2.5 border-b border-border/20 last:border-b-0">
+              <div className="flex items-center justify-between gap-3 sm:gap-6">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span id="download-quality-label" className="text-sm font-medium text-foreground">
+                    Download quality
+                  </span>
+                  <span className="hidden sm:block text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                    Applies to songs saved for offline. Higher sounds better and uses more disk.
+                  </span>
+                </div>
                 <Select
-                  className="w-full sm:w-52"
+                  className="w-40 sm:w-52 shrink-0"
                   value={downloadQuality}
                   onValueChange={(value) => setDownloadQuality(value as AudioQuality)}
                 >
-                  <SelectTrigger aria-labelledby={labelId}>
-                    <SelectValue />
+                  <SelectTrigger
+                    aria-labelledby="download-quality-label"
+                    className="h-9 rounded-full border border-white/10 bg-card/70 px-3 text-xs sm:text-sm hover:bg-card"
+                  >
+                    <SelectValue className="truncate whitespace-nowrap" />
                   </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(AUDIO_QUALITY_LABELS) as AudioQuality[]).map((quality) => (
@@ -1933,8 +1790,11 @@ export function SettingsPage({
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-            </SettingRow>
+              </div>
+              <p className="sm:hidden text-xs text-muted-foreground leading-relaxed">
+                Applies to songs saved for offline. Higher sounds better and uses more disk.
+              </p>
+            </div>
 
           </section>
 
@@ -1946,18 +1806,26 @@ export function SettingsPage({
               description="Where lyrics come from and how they read."
             />
 
-            <SettingRow
-              title="Translate lyrics"
-              description="Shows a translation under each line. Sends the lyrics to Google Translate."
-            >
-              {(labelId) => (
+            <div className="flex flex-col gap-1.5 py-2.5 border-b border-border/20 last:border-b-0">
+              <div className="flex items-center justify-between gap-3 sm:gap-6">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span id="translate-lyrics-label" className="text-sm font-medium text-foreground">
+                    Translate lyrics
+                  </span>
+                  <span className="hidden sm:block text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                    Shows a translation under each line. Sends the lyrics to Google Translate.
+                  </span>
+                </div>
                 <Select
-                  className="w-full sm:w-52"
+                  className="w-32 sm:w-52 shrink-0"
                   value={lyricsTranslationLang}
                   onValueChange={setLyricsTranslationLang}
                 >
-                  <SelectTrigger aria-labelledby={labelId}>
-                    <SelectValue />
+                  <SelectTrigger
+                    aria-labelledby="translate-lyrics-label"
+                    className="h-9 rounded-full border border-white/10 bg-card/70 px-3 text-xs sm:text-sm hover:bg-card"
+                  >
+                    <SelectValue className="truncate whitespace-nowrap" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={TRANSLATION_OFF}>Off</SelectItem>
@@ -1968,22 +1836,32 @@ export function SettingsPage({
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-            </SettingRow>
+              </div>
+              <p className="sm:hidden text-xs text-muted-foreground leading-relaxed">
+                Shows a translation under each line. Sends the lyrics to Google Translate.
+              </p>
+            </div>
 
-
-            <SettingRow
-              title="Lyrics text size"
-              description="Scales the lyrics screen. The size still adapts to the window on top of this."
-            >
-              {(labelId) => (
+            <div className="flex flex-col gap-1.5 py-2.5 border-b border-border/20 last:border-b-0">
+              <div className="flex items-center justify-between gap-3 sm:gap-6">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span id="lyrics-text-size-label" className="text-sm font-medium text-foreground">
+                    Lyrics text size
+                  </span>
+                  <span className="hidden sm:block text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                    Scales the lyrics screen. The size still adapts to the window on top of this.
+                  </span>
+                </div>
                 <Select
-                  className="w-full sm:w-52"
+                  className="w-32 sm:w-52 shrink-0"
                   value={String(lyricsFontScale)}
                   onValueChange={(value) => setLyricsFontScale(Number(value))}
                 >
-                  <SelectTrigger aria-labelledby={labelId}>
-                    <SelectValue />
+                  <SelectTrigger
+                    aria-labelledby="lyrics-text-size-label"
+                    className="h-9 rounded-full border border-white/10 bg-card/70 px-3 text-xs sm:text-sm hover:bg-card"
+                  >
+                    <SelectValue className="truncate whitespace-nowrap" />
                   </SelectTrigger>
                   <SelectContent>
                     {LYRICS_FONT_SCALES.map((option) => (
@@ -1993,22 +1871,32 @@ export function SettingsPage({
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-            </SettingRow>
+              </div>
+              <p className="sm:hidden text-xs text-muted-foreground leading-relaxed">
+                Scales the lyrics screen. The size still adapts to the window on top of this.
+              </p>
+            </div>
 
-
-            <SettingRow
-              title="Preferred lyrics source"
-              description="Tried first when a song opens. If it has nothing for that song, the others still run."
-            >
-              {(labelId) => (
+            <div className="flex flex-col gap-1.5 py-2.5 border-b border-border/20 last:border-b-0">
+              <div className="flex items-center justify-between gap-3 sm:gap-6">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span id="preferred-lyrics-source-label" className="text-sm font-medium text-foreground">
+                    Preferred lyrics source
+                  </span>
+                  <span className="hidden sm:block text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                    Tried first when a song opens. If it has nothing for that song, the others still run.
+                  </span>
+                </div>
                 <Select
-                  className="w-full sm:w-52"
+                  className="w-36 sm:w-52 shrink-0"
                   value={preferredLyricsSource}
                   onValueChange={setPreferredLyricsSourceId}
                 >
-                  <SelectTrigger aria-labelledby={labelId}>
-                    <SelectValue />
+                  <SelectTrigger
+                    aria-labelledby="preferred-lyrics-source-label"
+                    className="h-9 rounded-full border border-white/10 bg-card/70 px-3 text-xs sm:text-sm hover:bg-card"
+                  >
+                    <SelectValue className="truncate whitespace-nowrap" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={AUTO_LYRICS_SOURCE}>Automatic</SelectItem>
@@ -2019,8 +1907,11 @@ export function SettingsPage({
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-            </SettingRow>
+              </div>
+              <p className="sm:hidden text-xs text-muted-foreground leading-relaxed">
+                Tried first when a song opens. If it has nothing for that song, the others still run.
+              </p>
+            </div>
 
           </section>
 
@@ -2073,45 +1964,59 @@ export function SettingsPage({
 
             {!isMobile && (
               <>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className={cn(SETTING_LABEL, "min-w-0 flex-1")}>
-                    <strong>Application log</strong>
-                    <span>Open the current log file for sharing or troubleshooting.</span>
-                  </span>
+                <div className="flex items-center justify-between gap-3 py-2.5 border-b border-border/20">
+                  <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                    <span className="text-sm font-medium text-foreground">Application log</span>
+                    <span className="text-xs text-muted-foreground leading-relaxed">
+                      Open the current log file for sharing or troubleshooting.
+                    </span>
+                  </div>
                   <button
-                    className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-card disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50 shrink-0"
                     type="button"
                     disabled={logOpening}
                     onClick={() => void handleOpenLog()}
                   >
-                    <LogFileIcon size={18} />
-                    {logOpening ? "Opening..." : "Open log"}
+                    <LogFileIcon size={14} />
+                    <span>{logOpening ? "Opening..." : "Open log"}</span>
                   </button>
                 </div>
 
-                {logError && <p className="text-sm text-destructive">{logError}</p>}
+                {logError && <p className="text-xs text-destructive">{logError}</p>}
               </>
             )}
 
+            <div className="flex flex-col gap-2 rounded-xl bg-destructive/5 border border-destructive/15 p-3.5 sm:p-4 mt-1">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-sm font-semibold text-foreground">Delete all app data</span>
+                  <span className="text-xs text-muted-foreground leading-relaxed">
+                    Reset settings, cache, account, queue, tabs, onboarding, and local data.
+                  </span>
+                </div>
+                <button
+                  className="flex items-center gap-1.5 rounded-lg bg-destructive/15 border border-destructive/25 px-3 py-1.5 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/25 disabled:opacity-50 shrink-0 self-start sm:self-center"
+                  type="button"
+                  disabled={resetSettingsBusy}
+                  onClick={() => void handleClearAllSettings()}
+                >
+                  <TrashIcon size={13} />
+                  <span>
+                    {resetSettingsBusy
+                      ? "Deleting..."
+                      : resetSettingsConfirming
+                        ? "Press again to confirm"
+                        : "Delete everything"}
+                  </span>
+                </button>
+              </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className={cn(SETTING_LABEL, "min-w-0 flex-1")}>
-                <strong>Delete all app data</strong>
-                <span>Reset settings, cache, account, queue, tabs, onboarding, and local data.</span>
-              </span>
-              <button
-                className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                type="button"
-                disabled={resetSettingsBusy}
-                onClick={() => void handleClearAllSettings()}
-              >
-                <TrashIcon size={18} />
-                {resetSettingsBusy
-                  ? "Deleting..."
-                  : resetSettingsConfirming
-                    ? "Press again to confirm"
-                    : "Delete everything"}
-              </button>
+              {resetSettingsConfirming && (
+                <p className="text-[11px] font-medium text-destructive flex items-center gap-1.5 pt-1 border-t border-destructive/15">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive animate-pulse shrink-0" />
+                  This action is permanent and cannot be undone. Tap again to proceed.
+                </p>
+              )}
             </div>
 
             {resetSettingsError && <p className="text-sm text-destructive">{resetSettingsError}</p>}
@@ -2347,23 +2252,30 @@ export function SettingsPage({
               description="What actually plays the sound."
             />
 
-            <SettingRow
-              title="Playback method"
-              description={
-                audioEngineMode === "rust"
-                  ? "Decoded directly in Rust. Lowest memory, gapless and crossfade support."
-                  : audioEngineMode === "native"
-                  ? "Neno plays each track itself. About 90 MB lighter, slower to start, no gapless or crossfade."
-                  : "A hidden YouTube frame plays each track. Costs about 90 MB, starts faster, required for gapless and crossfade."
-              }
-            >
-              {() => (
+            <div className="flex flex-col gap-2 py-2.5 border-b border-border/20 last:border-b-0">
+              <div className="flex items-center justify-between gap-3 sm:gap-6">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span id="playback-method-label" className="text-sm font-medium text-foreground">
+                    Playback method
+                  </span>
+                  <span className="hidden sm:block text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                    {audioEngineMode === "rust"
+                      ? "Decoded directly in Rust. Lowest memory, gapless and crossfade support."
+                      : audioEngineMode === "native"
+                      ? "Neno plays each track itself. About 90 MB lighter, slower to start, no gapless or crossfade."
+                      : "A hidden YouTube frame plays each track. Costs about 90 MB, starts faster, required for gapless and crossfade."}
+                  </span>
+                </div>
+
                 <Select
                   className="w-36 sm:w-48 shrink-0"
                   value={audioEngineMode}
                   onValueChange={(value) => setAudioEngineMode(value as AudioEngineMode)}
                 >
-                  <SelectTrigger className="h-9 rounded-full border border-white/10 bg-card/70 px-3 text-xs sm:text-sm hover:bg-card">
+                  <SelectTrigger
+                    aria-labelledby="playback-method-label"
+                    className="h-9 rounded-full border border-white/10 bg-card/70 px-3 text-xs sm:text-sm hover:bg-card"
+                  >
                     <SelectValue className="truncate whitespace-nowrap" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2374,12 +2286,22 @@ export function SettingsPage({
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-            </SettingRow>
+              </div>
 
-            <p className="px-1 text-xs text-muted-foreground">
-              Applies from the next track.
-            </p>
+              {/* Mobile-only readable description spanning full width */}
+              <p className="sm:hidden text-xs text-muted-foreground leading-relaxed">
+                {audioEngineMode === "rust"
+                  ? "Decoded directly in Rust. Lowest memory, gapless and crossfade support."
+                  : audioEngineMode === "native"
+                  ? "Neno plays each track itself. About 90 MB lighter, slower to start, no gapless or crossfade."
+                  : "A hidden YouTube frame plays each track. Costs about 90 MB, starts faster, required for gapless and crossfade."}
+              </p>
+
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/75">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary/70 shrink-0" />
+                <span>Applies from the next track.</span>
+              </div>
+            </div>
 
             {!isMobile && <OutputDeviceSetting engineMode={audioEngineMode} />}
 

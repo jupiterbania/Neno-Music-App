@@ -21,6 +21,7 @@ interface PickCardProps {
   disabled?: boolean;
   onSelect?: () => void;
   onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
+  onWarm?: () => void;
 }
 
 /**
@@ -46,6 +47,7 @@ export function PickCard({
   disabled = false,
   onSelect,
   onContextMenu,
+  onWarm,
 }: PickCardProps) {
   const tapRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -92,6 +94,8 @@ export function PickCard({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         disabled ? "cursor-default opacity-60" : "cursor-pointer",
       )}
+      onMouseEnter={onWarm}
+      onTouchStart={onWarm}
       onPointerDown={(event) => {
         // Primary button only. `pointerdown` fires for right-click as well, so without this
         // the window `pointerup` below read the context-menu press as a tap and played it.
@@ -121,7 +125,7 @@ export function PickCard({
       <span
         className={cn(
           "relative block size-full overflow-hidden rounded-xl bg-card shadow-md",
-          "ring-1 ring-white/10 transition-all duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]",
+          "ring-1 ring-white/10 transition-all duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:scale-[0.96]",
           !disabled && "group-hover/pick:-translate-y-1.5 group-hover/pick:shadow-xl group-hover/pick:ring-white/25",
         )}
       >

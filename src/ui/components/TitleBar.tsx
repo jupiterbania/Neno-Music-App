@@ -3,10 +3,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
 import { Tooltip } from "@/components/motion/tooltip";
-import { DiscordIcon, LastFmIcon, LoginIcon, SettingsIcon, YouTubeMusicIcon } from "@/ui/icons";
+import { DiscordIcon, LoginIcon, SettingsIcon, YouTubeMusicIcon } from "@/ui/icons";
 import { DiscordRpcService } from "../../player/DiscordRPC";
 import { useDiscordPresenceEnabled } from "../settings/discord";
-import { setLastFmScrobblingEnabled, useLastFmScrobblingEnabled } from "../settings/lastfm";
 import { setYouTubeScrobbling, useYouTubeScrobbling } from "../settings/youtubeAccount";
 import { logInternalError, logInternalInfo, logInternalWarn } from "../../internal/logging";
 import {
@@ -101,12 +100,10 @@ export function TitleBar({
   const showCustomWindowControls = !nativeWindowControls
     && (!isLinux || !tilingWindowManager || forceWindowControls);
   const discordEnabled = useDiscordPresenceEnabled();
-  const lastFmEnabled = useLastFmScrobblingEnabled();
   const ytScrobblingEnabled = useYouTubeScrobbling();
   const notificationsVisible = useToolbarItemVisible("notifications");
   const downloadsVisible = useToolbarItemVisible("downloads");
   const discordVisible = useToolbarItemVisible("discord");
-  const lastFmVisible = useToolbarItemVisible("lastfm");
   const ytMusicVisible = useToolbarItemVisible("ytmusic");
   const homePointerRef = useRef<{
     pointerId: number;
@@ -284,31 +281,7 @@ export function TitleBar({
           </Button>
         </Tooltip>
         )}
-        {lastFmVisible && (
-        <Tooltip
-          side="bottom"
-          content={lastFmEnabled ? "Last.fm scrobbling on" : "Last.fm scrobbling off"}
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setLastFmScrobblingEnabled(!lastFmEnabled)}
-            aria-pressed={lastFmEnabled}
-            aria-label={
-              lastFmEnabled ? "Turn off Last.fm scrobbling" : "Turn on Last.fm scrobbling"
-            }
-          >
-            <LastFmIcon
-              size={16}
-              aria-hidden="true"
-              className={cn(
-                "transition-opacity",
-                lastFmEnabled ? "opacity-100 text-primary" : "opacity-40",
-              )}
-            />
-          </Button>
-        </Tooltip>
-        )}
+
         {ytMusicVisible && (
         <Tooltip
           side="bottom"

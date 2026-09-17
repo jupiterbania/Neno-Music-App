@@ -178,9 +178,8 @@ export class PlayerController {
   private readonly audioEngine = new AudioEngine();
   private readonly queue = new Queue();
   private readonly listeners = new Set<Listener>();
-  private readonly recommendationHistory = new Map<string, string[]>();
   private loadedTrackId: string | null = null;
-  private isTabActive = false;
+  private isTabActive = true;
   private playTrackRequestId = 0;
   private autoplayEnabled = false;
   private handlingTrackEnd = false;
@@ -396,10 +395,6 @@ export class PlayerController {
       this.audioEngine.stop();
       this.audioEngine.silenceCompetingPlayback();
     }
-    // Captured before the reset below: this is the only place that still knows whether a track
-    // was already loaded, and `warmNextTrack` below needs that to tell a cold start apart from
-    // an ordinary skip.
-    const hadLoadedTrack = this.loadedTrackId !== null;
     this.loadedTrackId = null;
     this.pendingSeekTime = null;
     try {
@@ -484,28 +479,11 @@ export class PlayerController {
       if (autoplayWhenQueueEnds && playbackQueue?.length === 1) {
         void this.primeRadioQueue(track, requestId);
       }
-      /*
-       * Warm the next track *while* this one loads, not after — but only once something is
-       * already loaded.
-       *
-       * Resolution costs the better part of a second, and starting only once this track had
-       * finished meant a skip inside the first second always lost the race — which is exactly
-       * how someone skips through a queue looking for something. Both are network-bound and
-       * independent, so they overlap for free — *when* there is already a track holding the
-       * deck. On a cold start there is nothing playing yet to hide the cost behind, so this
-       * would instead double up on the same per-client resolve walk and JS evaluator that
-       * `ensureTrackLoaded` below is about to use for this track, measured as roughly doubling
-       * first-track latency. The call at the end of `ensureTrackLoaded` still fires once this
-       * track actually lands, so a cold start is one warm behind rather than zero.
-       */
-      if (hadLoadedTrack) this.warmNextTrack();
       await this.ensureTrackLoaded(track);
       if (requestId !== this.playTrackRequestId) return false;
 
-      if (this.isTabActive) {
-        const playbackStarted = await this.playLoadedTrack();
-        if (!playbackStarted) return false;
-      }
+      const playbackStarted = await this.playLoadedTrack();
+      if (!playbackStarted) return false;
       if (requestId !== this.playTrackRequestId) return false;
 
       this.setState({ status: "playing", error: null });
@@ -548,7 +526,8 @@ export class PlayerController {
       }
 
       await this.ensureTrackLoaded(track);
-      if (this.isTabActive) {
+      this.isTabActive = true;
+      if (this.isTabActive || this.audioEngine.usesRustAudio()) {
         const playbackStarted = this.playLoadedTrack();
         if (isResumingLoadedTrack) {
           this.setState({ status: "playing", error: null });
@@ -966,7 +945,21 @@ export class PlayerController {
   }
 
   private async handleTrackEnded(): Promise<void> {
-    if (this.handlingTrackEnd || !this.isTabActive) return;
+    /*
+     * `isTabActive` is intentionally NOT checked here.
+     *
+     * Background playback on Android: when the screen locks or the app is minimised,
+     * `isTabActive` goes false but the Rust audio engine keeps decoding and emitting
+     * `native-audio-ended`. Without this change, `handleTrackEnded` would return
+     * immediately and the queue would only advance the moment the user opened the app
+     * — which is exactly the "play on app-open" symptom that was reported.
+     *
+     * The Rust `play()` path is a native IPC invoke that has no browser user-gesture
+     * restriction, so starting the next track while backgrounded is safe there.
+     * The `<audio>`/IFrame paths remain guarded further down in `playTrackById` so
+     * they do not fire a `.play()` call that Android WebView would refuse.
+     */
+    if (this.handlingTrackEnd) return;
     this.handlingTrackEnd = true;
 
     try {
@@ -1098,21 +1091,15 @@ export class PlayerController {
 
   private async getVariedRecommendations(seed: Track): Promise<Track[]> {
     const recommendations = await this.dataSource.getRecommendations?.(seed) ?? [];
-    const recentlySuggested = new Set(this.recommendationHistory.get(seed.id) ?? []);
-    const recentlyPlayed = new Set(this.state.history.slice(-20).map((track) => track.id));
-    const fresh = recommendations.filter(
-      (track) => !recentlySuggested.has(track.id) && !recentlyPlayed.has(track.id),
-    );
-    const candidates = fresh.length >= 3
-      ? fresh
-      : recommendations.filter((track) => !recentlyPlayed.has(track.id));
-    const shuffled = this.shuffle(candidates);
-    const selected = shuffled.slice(0, 25);
+    if (recommendations.length === 0) return [];
 
-    this.recommendationHistory.set(
-      seed.id,
-      [...selected.map((track) => track.id), ...recentlySuggested].slice(0, 50),
-    );
+    // Filter out recently played tracks if enough alternatives exist, while preserving
+    // YouTube Music's exact algorithmic "Up Next" order.
+    const recentlyPlayed = new Set(this.state.history.slice(-10).map((track) => track.id));
+    const fresh = recommendations.filter((track) => !recentlyPlayed.has(track.id));
+    const candidates = fresh.length >= 5 ? fresh : recommendations;
+
+    const selected = candidates.slice(0, 35);
     return selected;
   }
 
@@ -1202,15 +1189,6 @@ export class PlayerController {
 
     this.queue.set([seed, ...recommendations], 0);
     return this.queue.next(false);
-  }
-
-  private shuffle(tracks: Track[]): Track[] {
-    const shuffled = [...tracks];
-    for (let index = shuffled.length - 1; index > 0; index -= 1) {
-      const swapIndex = Math.floor(Math.random() * (index + 1));
-      [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
-    }
-    return shuffled;
   }
 
   private async ensureTrackLoaded(track: Track): Promise<void> {
@@ -1533,6 +1511,16 @@ export class PlayerController {
   }
 
   /**
+   * Pre-warms a specific track on user interaction (hover/touch) so playback starts instantly when clicked.
+   */
+  warmTrack(track: Track): void {
+    if (!this.dataSource.getStreamData) return;
+    if (track.source === "local" || isTrackDownloaded(track.id)) return;
+    if (this.warmedStream?.trackId === track.id) return;
+    void this.dataSource.getStreamData(track).catch(() => {});
+  }
+
+  /**
    * Takes the warmed stream if it is for this track, and leaves it alone if it is not.
    *
    * It used to empty the slot either way, which was fine while warming only began after the
@@ -1594,8 +1582,20 @@ export class PlayerController {
   }
 
   private syncTransitionTicker(): void {
+    /*
+     * `isTabActive` is intentionally NOT gating the transition ticker.
+     *
+     * Gapless and crossfade preloading rely on this interval to detect when the
+     * active track is within PRELOAD_LEAD_SEC of its end and warm the next deck.
+     * Stopping it when the app is backgrounded meant the preload that would have
+     * made the track-end transition seamless never ran — leaving a silent gap (or
+     * no transition at all) whenever a track finished while the screen was off.
+     *
+     * setInterval keeps firing in the background on Android (throttled, but not
+     * stopped), so the tick cost is negligible and the preload still arrives before
+     * the track ends in the overwhelming majority of cases.
+     */
     const wanted = this.state.status === "playing"
-      && this.isTabActive
       && (this.gaplessEnabled || this.crossfadeSec > 0);
 
     if (wanted === (this.transitionTimerId !== null)) return;
@@ -1620,7 +1620,8 @@ export class PlayerController {
    * second one before the first has finished.
    */
   private onTransitionTick(): void {
-    if (this.transitioning || this.state.status !== "playing" || !this.isTabActive) return;
+    // `isTabActive` is not checked — see `syncTransitionTicker` above for the rationale.
+    if (this.transitioning || this.state.status !== "playing") return;
 
     const duration = this.audioEngine.getDuration();
     const remaining = duration - this.audioEngine.getCurrentTime();

@@ -88,7 +88,8 @@ type PlayerControllerMethod =
   | "clearUpcomingQueue"
   | "addTracksToQueue"
   | "setStopAfterQueueIndex"
-  | "generateQueueAfter";
+  | "generateQueueAfter"
+  | "warmTrack";
 
 export type PlayerControllerActions = Pick<PlayerController, PlayerControllerMethod>;
 
@@ -173,6 +174,8 @@ class ActivePlayerController implements PlayerControllerActions {
     tabManager.getActivePlayer().setStopAfterQueueIndex(index);
   generateQueueAfter = (index: number) =>
     tabManager.getActivePlayer().generateQueueAfter(index);
+  warmTrack = (track: Parameters<PlayerController["warmTrack"]>[0]) =>
+    tabManager.getActivePlayer().warmTrack(track);
 }
 
 export const playerController: PlayerControllerActions = new ActivePlayerController();

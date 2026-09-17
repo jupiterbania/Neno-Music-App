@@ -9,7 +9,7 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 import { Loader } from "@/components/motion/loader";
-import { BookmarkActiveIcon, BookmarkIcon, CheckIcon, CopyIcon, DownloadIcon, EyeClosedIcon, EyeIcon, ImageIcon, PencilIcon, TrashIcon } from "@/ui/icons";
+import { BookmarkActiveIcon, BookmarkIcon, CheckIcon, DownloadIcon, EyeClosedIcon, EyeIcon, ImageIcon, PencilIcon, ShareIcon, TrashIcon } from "@/ui/icons";
 import type { Album, Playlist } from "../../datasource/types";
 import type { LibraryController } from "../../player/LibraryController";
 import { isLocalPlaylist, LOCAL_IMAGE_PREFIX, setLocalPlaylistArtwork } from "../../player/localPlaylists";
@@ -17,6 +17,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { forgetArtworkSource } from "../../internal/artworkCache";
 import { exportPlaylist } from "../../player/playlistTransfer";
 import { hidePlaylist, unhidePlaylist, useHiddenPlaylistIds } from "../settings/hiddenPlaylists";
+import { shareContent } from "../../internal/share";
 import {
   PlaylistContext,
   type PlaylistContextMenuValue,
@@ -207,25 +208,31 @@ export function PlaylistContextMenuProvider({
     }
   };
 
-  const copyAlbumUrl = async () => {
+  const shareAlbumUrl = async () => {
     if (!album || isSaving) return;
     setPosition(null);
-    try {
-      await navigator.clipboard.writeText(getAlbumUrl(album));
+    const url = getAlbumUrl(album);
+    const result = await shareContent({
+      title: album.title,
+      text: `Check out ${album.title} on Neno Music`,
+      url,
+    });
+    if (result.copied) {
       showToast("Url copied to clipboard");
-    } catch {
-      showToast("Unable to copy the link.");
     }
   };
 
-  const copyPlaylistUrl = async () => {
+  const sharePlaylistUrl = async () => {
     if (!playlist || isSaving) return;
     setPosition(null);
-    try {
-      await navigator.clipboard.writeText(getPlaylistUrl(playlist));
+    const url = getPlaylistUrl(playlist);
+    const result = await shareContent({
+      title: playlist.title,
+      text: `Check out ${playlist.title} on Neno Music`,
+      url,
+    });
+    if (result.copied) {
       showToast("Url copied to clipboard");
-    } catch {
-      showToast("Unable to copy the link.");
     }
   };
 
@@ -386,10 +393,10 @@ export function PlaylistContextMenuProvider({
               type="button"
               role="menuitem"
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => void copyAlbumUrl()}
+              onClick={() => void shareAlbumUrl()}
             >
-              <CopyIcon size={18} />
-              <span>Copy album URL</span>
+              <ShareIcon size={18} />
+              <span>Share album</span>
             </button>
           )}
           {canCopyPlaylistUrl && (
@@ -397,10 +404,10 @@ export function PlaylistContextMenuProvider({
               type="button"
               role="menuitem"
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => void copyPlaylistUrl()}
+              onClick={() => void sharePlaylistUrl()}
             >
-              <CopyIcon size={18} />
-              <span>Copy playlist URL</span>
+              <ShareIcon size={18} />
+              <span>Share playlist</span>
             </button>
           )}
           {playlist && (

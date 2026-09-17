@@ -52,7 +52,6 @@ mod process_memory;
 mod discord_rpc;
 mod equalizer;
 mod opus_source;
-mod lastfm;
 
 // Keep the legacy service name so existing sign-in credentials survive the product rename.
 const KEYRING_SERVICE: &str = "com.ytmusicdock.app";
@@ -5669,13 +5668,6 @@ pub fn run() {
             local_audio_watch,
             #[cfg(not(target_os = "android"))]
             local_audio_unwatch,
-
-            lastfm::lastfm_auth_token,
-            lastfm::lastfm_complete_auth,
-            lastfm::lastfm_disconnect,
-            lastfm::lastfm_get_session,
-            lastfm::lastfm_scrobble,
-            lastfm::lastfm_update_now_playing,
             #[cfg(not(target_os = "android"))]
             discord_rpc_update,
             #[cfg(not(target_os = "android"))]

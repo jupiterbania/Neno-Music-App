@@ -378,6 +378,49 @@ class MediaPlaybackService : Service() {
         return START_STICKY
     }
 
+    /**
+     * Returns an ordered list of URLs to try for artwork, preferring the highest resolution HD images.
+     *
+     * For YouTube video thumbnails (i.ytimg.com/vi/…) maxresdefault (1280×720) and sddefault (640×480)
+     * provide crystal clear notification artwork.
+     * For YouTube Music covers (googleusercontent / ggpht), converting low-res thumbnails (=w120, =s60)
+     * to =w1200-h1200-l90-rj or =s1200 provides pristine HD album art.
+     */
+    private fun artworkUrlCandidates(url: String): List<String> {
+        val trimmed = url.trim()
+        if (trimmed.isEmpty()) return emptyList()
+
+        val candidates = mutableListOf<String>()
+
+        // 1. YouTube video thumbnails: i.ytimg.com, img.youtube.com
+        val videoIdRegex = Regex("""(?:i\.ytimg\.com|img\.youtube\.com)/(?:vi|vi_webp)/([A-Za-z0-9_-]{11})""")
+        val videoId = videoIdRegex.find(trimmed)?.groupValues?.getOrNull(1)
+        if (videoId != null) {
+            candidates.add("https://i.ytimg.com/vi/$videoId/maxresdefault.jpg")
+            candidates.add("https://i.ytimg.com/vi/$videoId/sddefault.jpg")
+            candidates.add("https://i.ytimg.com/vi/$videoId/hq720.jpg")
+            candidates.add("https://i.ytimg.com/vi/$videoId/hqdefault.jpg")
+            candidates.add(trimmed)
+            return candidates.distinct()
+        }
+
+        // 2. Google User Content / GGPHT covers (YouTube Music albums, singles, artist covers)
+        if (trimmed.contains("googleusercontent.com") || trimmed.contains("ggpht.com")) {
+            val base = if (trimmed.contains("=")) trimmed.substringBeforeLast("=") else trimmed
+            candidates.add("$base=w1200-h1200-l90-rj")
+            candidates.add("$base=w800-h800-l90-rj")
+            candidates.add("$base=w544-h544-l90-rj")
+            candidates.add("$base=s1200")
+            candidates.add("$base=s800")
+            candidates.add(trimmed)
+            return candidates.distinct()
+        }
+
+        // 3. Fallback for other URLs
+        candidates.add(trimmed)
+        return candidates.distinct()
+    }
+
     private fun loadArtworkAsync(url: String?) {
         if (url.isNullOrBlank()) {
             currentArtworkUrl = null
@@ -389,19 +432,34 @@ class MediaPlaybackService : Service() {
         }
         currentArtworkUrl = url
         imageExecutor.execute {
-            try {
-                val connection = URL(url).openConnection()
-                connection.connectTimeout = 6000
-                connection.readTimeout = 6000
-                connection.getInputStream().use { stream ->
-                    val bitmap = BitmapFactory.decodeStream(stream)
-                    if (bitmap != null && currentArtworkUrl == url) {
-                        currentArtworkBitmap = bitmap
-                        updateNotification()
+            val candidates = artworkUrlCandidates(url)
+            var loaded: Bitmap? = null
+            for (candidate in candidates) {
+                if (currentArtworkUrl != url) return@execute // track changed mid-load
+                try {
+                    val connection = (java.net.URL(candidate).openConnection() as java.net.HttpURLConnection).apply {
+                        connectTimeout = 6000
+                        readTimeout = 8000
+                        instanceFollowRedirects = true
+                        setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10)")
                     }
+                    if (connection.responseCode in 200..299) {
+                        connection.inputStream.use { stream ->
+                            val bitmap = BitmapFactory.decodeStream(stream)
+                            if (bitmap != null && bitmap.width > 20 && bitmap.height > 20) {
+                                loaded = bitmap
+                            }
+                        }
+                    }
+                    connection.disconnect()
+                    if (loaded != null) break
+                } catch (_: Exception) {
+                    // try next candidate
                 }
-            } catch (_: Exception) {
-                // Fall back to app launcher icon
+            }
+            if (loaded != null && currentArtworkUrl == url) {
+                currentArtworkBitmap = loaded
+                updateNotification()
             }
         }
     }
@@ -478,6 +536,7 @@ class MediaPlaybackService : Service() {
             currentArtworkBitmap?.let {
                 metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it)
                 metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, it)
+                metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, it)
             }
             mediaSession?.setMetadata(metaBuilder.build())
         } catch (_: Exception) {}
@@ -512,7 +571,7 @@ class MediaPlaybackService : Service() {
             BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
         } catch (_: Exception) { BitmapFactory.decodeResource(resources, android.R.drawable.ic_menu_info_details) }
 
-        val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setLargeIcon(currentArtworkBitmap ?: fallbackLargeIcon)
             .setContentTitle(currentTitle)
@@ -531,16 +590,22 @@ class MediaPlaybackService : Service() {
             )
             .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
             .setStyle(mediaStyle)
+            .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
-                notificationBuilder.build(),
+                notification,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
             )
         } else {
-            startForeground(NOTIFICATION_ID, notificationBuilder.build())
+            startForeground(NOTIFICATION_ID, notification)
         }
+
+        try {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            notificationManager?.notify(NOTIFICATION_ID, notification)
+        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {

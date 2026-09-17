@@ -1,7 +1,7 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { SpinnerSteps } from "@/components/motion/loader";
-import { CheckIcon, CopyIcon, UserPlusIcon } from "@/ui/icons";
+import { CheckIcon, ShareIcon, UserPlusIcon } from "@/ui/icons";
 import {
   Select,
   SelectContent,
@@ -18,6 +18,7 @@ import type {
   Track,
 } from "../../datasource/types";
 import type { LibraryController } from "../../player/LibraryController";
+import { shareContent } from "../../internal/share";
 import type { PlayerControllerActions } from "../../player/playerStore";
 import { shuffleTracks } from "../../player/shuffleTracks";
 import { AlbumCard } from "../components/AlbumCard";
@@ -277,12 +278,15 @@ export function ArtistView({
     }
   };
 
-  const copyArtistUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(getArtistUrl(displayedArtist));
+  const shareArtistUrl = async () => {
+    const url = getArtistUrl(displayedArtist);
+    const result = await shareContent({
+      title: displayedArtist.name,
+      text: `Listen to ${displayedArtist.name} on Neno Music`,
+      url,
+    });
+    if (result.copied) {
       showToast("Url copied to clipboard");
-    } catch {
-      showToast("Unable to copy the link.");
     }
   };
 
@@ -294,13 +298,13 @@ export function ArtistView({
           <button
             type="button"
             className="group/title flex items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => void copyArtistUrl()}
-            aria-label={`Copy ${displayedArtist.name} URL`}
+            onClick={() => void shareArtistUrl()}
+            aria-label={`Share ${displayedArtist.name}`}
           >
             <span>{displayedArtist.name}</span>
-            <CopyIcon
+            <ShareIcon
               className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/title:opacity-100"
-              size={22}
+              size={20}
               aria-hidden="true"
             />
           </button>

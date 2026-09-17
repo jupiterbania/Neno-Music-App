@@ -11,9 +11,13 @@ import type { Artist, ArtistReference } from "../../datasource/types";
 import { cn } from "@/lib/utils";
 import { isMacOS } from "../platform";
 
-type NavigateArtist = (artist: Artist, openInNewTab: boolean) => void;
+export type NavigateArtist = (artist: Artist, openInNewTab: boolean) => void;
 
-const ArtistNavigationContext = createContext<NavigateArtist | null>(null);
+export const ArtistNavigationContext = createContext<NavigateArtist | null>(null);
+
+export function useArtistNavigation(): NavigateArtist | null {
+  return useContext(ArtistNavigationContext);
+}
 
 function getFallbackArtists(fallback: string): ArtistReference[] {
   return fallback

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import {
@@ -26,6 +26,7 @@ import {
   ShuffleIcon,
   SkipNextIcon,
   SkipPreviousIcon,
+  TrashIcon,
   YTSaveIcon,
 } from "@/ui/icons";
 import { SpinnerSteps } from "@/components/motion/loader";
@@ -38,8 +39,11 @@ import {
   usePlayerSessionSelector,
 } from "../../../player/playerStore";
 import type { PlayerSession } from "../../../player/PlayerController";
-import type { Lyrics, Track } from "../../../datasource/types";
+import type { Artist, Lyrics, Track } from "../../../datasource/types";
+import { useArtistNavigation } from "../ArtistLinks";
 import { TrackArtwork } from "../TrackArtwork";
+import { getArtworkUrlCandidates } from "../../../datasource/youtube/artwork";
+import { shareContent } from "../../../internal/share";
 import { SeekBar } from "../player/SeekBar";
 import { useTrackContextMenu } from "../TrackContextMenu";
 import { formatMinutesSeconds } from "@/lib/utils";
@@ -55,6 +59,7 @@ import {
 interface MobileNowPlayingModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenArtist?: (artist: Artist) => void;
 }
 
 type QueueSheetState = "collapsed" | "half" | "full";
@@ -87,7 +92,214 @@ function queueSliceEqual(
   );
 }
 
-export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModalProps) {
+interface SwipeableQueueRowProps {
+  track: Track;
+  absoluteIndex: number;
+  isDragged: boolean;
+  dropEdge: "before" | "after" | null;
+  onPlay: (absoluteIndex: number) => void;
+  onInstantPlay: (absoluteIndex: number, track: Track) => void;
+  onRemove: (absoluteIndex: number, track: Track) => void;
+  onDragStart: (e: React.PointerEvent, absoluteIndex: number) => void;
+  onDragMove: (e: React.PointerEvent) => void;
+  onDragEnd: (e: React.PointerEvent) => void;
+}
+
+const SwipeableQueueRow = memo(function SwipeableQueueRow({
+  track,
+  absoluteIndex,
+  isDragged,
+  dropEdge,
+  onPlay,
+  onInstantPlay,
+  onRemove,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+}: SwipeableQueueRowProps) {
+  const rowElRef = useRef<HTMLDivElement | null>(null);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const currentOffsetRef = useRef<number>(0);
+  const isHorizontalSwipeRef = useRef<boolean | null>(null);
+  const [swipeDirection, setSwipeDirection] = useState<"left" | "right" | null>(null);
+  const [swipeProgress, setSwipeProgress] = useState<number>(0);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+    currentOffsetRef.current = 0;
+    isHorizontalSwipeRef.current = null;
+    if (rowElRef.current) {
+      rowElRef.current.style.transition = "none";
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const deltaX = e.touches[0].clientX - touchStartXRef.current;
+    const deltaY = e.touches[0].clientY - touchStartYRef.current;
+
+    if (isHorizontalSwipeRef.current === null) {
+      if (Math.abs(deltaX) > 7 && Math.abs(deltaX) > Math.abs(deltaY) + 2) {
+        isHorizontalSwipeRef.current = true;
+      } else if (Math.abs(deltaY) > 7) {
+        isHorizontalSwipeRef.current = false;
+      }
+    }
+
+    if (isHorizontalSwipeRef.current === true) {
+      e.stopPropagation();
+
+      let clamped = deltaX;
+      if (clamped > 110) clamped = 110 + (clamped - 110) * 0.25;
+      if (clamped < -110) clamped = -110 + (clamped + 110) * 0.25;
+      currentOffsetRef.current = clamped;
+
+      if (rowElRef.current) {
+        rowElRef.current.style.transform = `translate3d(${clamped}px, 0, 0)`;
+      }
+
+      if (clamped > 0) {
+        setSwipeDirection("right");
+        setSwipeProgress(Math.min(1, clamped / 70));
+      } else if (clamped < 0) {
+        setSwipeDirection("left");
+        setSwipeProgress(Math.min(1, Math.abs(clamped) / 70));
+      } else {
+        setSwipeDirection(null);
+        setSwipeProgress(0);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartXRef.current === null) return;
+    const offset = currentOffsetRef.current;
+    const isHorizontal = isHorizontalSwipeRef.current;
+
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+    currentOffsetRef.current = 0;
+    isHorizontalSwipeRef.current = null;
+
+    if (isHorizontal) {
+      if (offset < -65) {
+        // SWIPE LEFT -> REMOVE
+        if (rowElRef.current) {
+          rowElRef.current.style.transition = "transform 0.2s ease-out, opacity 0.2s ease-out";
+          rowElRef.current.style.transform = "translate3d(-105%, 0, 0)";
+          rowElRef.current.style.opacity = "0";
+        }
+        setTimeout(() => {
+          onRemove(absoluteIndex, track);
+        }, 160);
+        return;
+      } else if (offset > 65) {
+        // SWIPE RIGHT -> INSTANT PLAY
+        if (rowElRef.current) {
+          rowElRef.current.style.transition = "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)";
+          rowElRef.current.style.transform = "translate3d(0, 0, 0)";
+        }
+        setSwipeDirection(null);
+        setSwipeProgress(0);
+        onInstantPlay(absoluteIndex, track);
+        return;
+      }
+    }
+
+    if (rowElRef.current) {
+      rowElRef.current.style.transition = "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)";
+      rowElRef.current.style.transform = "translate3d(0, 0, 0)";
+    }
+    setSwipeDirection(null);
+    setSwipeProgress(0);
+  };
+
+  return (
+    <div
+      data-queue-index={absoluteIndex}
+      className={cn(
+        "relative overflow-hidden rounded-xl my-1 select-none touch-pan-y",
+        isDragged && "opacity-40 scale-[0.98]",
+        dropEdge === "after" && "border-b-2 border-primary",
+        dropEdge === "before" && "border-t-2 border-primary",
+      )}
+    >
+      {/* 1. Left Action (Swipe Right): Instant Play */}
+      <div
+        className={cn(
+          "absolute inset-y-0 left-0 w-full flex items-center gap-2 pl-4 rounded-xl transition-opacity bg-gradient-to-r from-emerald-600/90 via-emerald-500/80 to-transparent text-white font-semibold text-xs",
+          swipeDirection === "right" ? "opacity-100" : "opacity-0 pointer-events-none",
+        )}
+        style={{ opacity: swipeDirection === "right" ? Math.max(0.2, swipeProgress) : 0 }}
+      >
+        <div className="flex size-7 items-center justify-center rounded-full bg-white text-emerald-700 shadow-md">
+          <PlayActiveIcon size={16} className="translate-x-0.5" />
+        </div>
+        <span className="text-sm font-bold tracking-wide drop-shadow-sm">Play Now</span>
+      </div>
+
+      {/* 2. Right Action (Swipe Left): Remove from Up Next */}
+      <div
+        className={cn(
+          "absolute inset-y-0 right-0 w-full flex items-center justify-end gap-2 pr-4 rounded-xl transition-opacity bg-gradient-to-l from-rose-600/90 via-rose-500/80 to-transparent text-white font-semibold text-xs",
+          swipeDirection === "left" ? "opacity-100" : "opacity-0 pointer-events-none",
+        )}
+        style={{ opacity: swipeDirection === "left" ? Math.max(0.2, swipeProgress) : 0 }}
+      >
+        <span className="text-sm font-bold tracking-wide drop-shadow-sm">Remove</span>
+        <div className="flex size-7 items-center justify-center rounded-full bg-white text-rose-700 shadow-md">
+          <TrashIcon size={16} />
+        </div>
+      </div>
+
+      {/* FOREGROUND ROW CARD */}
+      <div
+        ref={rowElRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        onClick={() => onPlay(absoluteIndex)}
+        className="relative z-10 flex items-center justify-between gap-3 py-2 px-2.5 rounded-xl bg-[#141414] hover:bg-[#1c1c1c] active:bg-[#202020] border border-white/5 cursor-pointer will-change-transform"
+      >
+        <div className="size-11 shrink-0 overflow-hidden rounded-lg shadow-sm border border-white/10 bg-black/40">
+          <TrackArtwork
+            artworkUrl={track.artworkUrl}
+            size={44}
+            className="size-full object-cover"
+          />
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-sm font-semibold text-white">
+            {track.title}
+          </span>
+          <span className="truncate text-xs font-medium text-white/60">
+            {track.artist || "Unknown Artist"}
+            {track.durationSec ? ` • ${formatMinutesSeconds(track.durationSec)}` : ""}
+          </span>
+        </div>
+
+        <div
+          onPointerDown={(e) => onDragStart(e, absoluteIndex)}
+          onPointerMove={onDragMove}
+          onPointerUp={onDragEnd}
+          onPointerCancel={onDragEnd}
+          onClick={(e) => e.stopPropagation()}
+          className="flex size-10 shrink-0 items-center justify-center text-white/40 hover:text-white active:text-white cursor-grab active:cursor-grabbing touch-none rounded-lg"
+          aria-label="Hold and drag to reorder"
+          title="Hold and drag to reorder"
+        >
+          <DragHandleIcon size={20} />
+        </div>
+      </div>
+    </div>
+  );
+});
+
+export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileNowPlayingModalProps) {
   // Mode toggles
   const [queueSheetState, setQueueSheetState] = useState<QueueSheetState>("collapsed");
   const [audioMode, setAudioMode] = useState<AudioMode>("audio");
@@ -95,6 +307,17 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+
+  const navigateArtist = useArtistNavigation();
+
+  const handleArtistClick = (artistRef: { id?: string; name: string }) => {
+    onClose();
+    if (onOpenArtist) {
+      onOpenArtist({ id: artistRef.id ?? "", name: artistRef.name });
+    } else if (navigateArtist) {
+      navigateArtist({ id: artistRef.id ?? "", name: artistRef.name }, false);
+    }
+  };
 
   // Lyrics state
   const [lyrics, setLyrics] = useState<Lyrics | null>(null);
@@ -131,6 +354,13 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
   const isShuffle = state.shuffleEnabled;
   const isRepeatAll = state.playbackOrderMode === "repeat-all";
   const isRepeatOne = state.playbackOrderMode === "repeat-one";
+
+  // HD artwork URL — maxresdefault for YouTube videos, large variant for music covers.
+  // The TrackArtwork component already handles this via its candidate ladder, but the
+  // ambient backdrop <div> loads the URL directly, so we pick the best candidate here.
+  const hdArtworkUrl = currentTrack?.artworkUrl
+    ? (getArtworkUrlCandidates(currentTrack.artworkUrl)[0] ?? currentTrack.artworkUrl)
+    : undefined;
 
   const isLiked =
     Boolean(currentTrack) &&
@@ -329,23 +559,13 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
     e.stopPropagation();
     if (!currentTrack) return;
     const shareUrl = `https://music.youtube.com/watch?v=${encodeURIComponent(currentTrack.id)}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: currentTrack.title,
-          text: `Listening to ${currentTrack.title} by ${currentTrack.artist}`,
-          url: shareUrl,
-        });
-      } catch {
-        // User dismissed share dialog
-      }
-    } else {
-      try {
-        await navigator.clipboard.writeText(shareUrl);
-        showToast("Link copied to clipboard!");
-      } catch {
-        showToast("Failed to copy link");
-      }
+    const result = await shareContent({
+      title: currentTrack.title,
+      text: `Listening to ${currentTrack.title} by ${currentTrack.artist}`,
+      url: shareUrl,
+    });
+    if (result.copied) {
+      showToast("Link copied to clipboard!");
     }
   };
 
@@ -517,7 +737,23 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
   const dropTargetRef = useRef<{ index: number; insertAfter: boolean } | null>(null);
   const isDraggingRef = useRef(false);
 
-  const handleRowDragStart = (e: React.PointerEvent, absoluteIndex: number) => {
+  const handlePlayQueueTrack = useCallback((absoluteIndex: number) => {
+    if (!isDraggingRef.current) {
+      void playerController.playQueueTrackAt(absoluteIndex);
+    }
+  }, []);
+
+  const handleInstantPlayTrack = useCallback((absoluteIndex: number, track: Track) => {
+    showToast(`Playing ${track.title}`);
+    void playerController.playQueueTrackAt(absoluteIndex);
+  }, []);
+
+  const handleRemoveTrack = useCallback((absoluteIndex: number, _track: Track) => {
+    playerController.removeFromQueueAt(absoluteIndex);
+    showToast("Removed from Up Next");
+  }, []);
+
+  const handleRowDragStart = useCallback((e: React.PointerEvent, absoluteIndex: number) => {
     e.stopPropagation();
     const target = e.currentTarget as HTMLElement;
     try {
@@ -534,9 +770,9 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
     };
     dropTargetRef.current = null;
     setDropTarget(null);
-  };
+  }, []);
 
-  const handleRowDragMove = (e: React.PointerEvent) => {
+  const handleRowDragMove = useCallback((e: React.PointerEvent) => {
     const drag = pointerDragRef.current;
     if (!drag || e.pointerId !== drag.pointerId) return;
 
@@ -567,9 +803,9 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
     const newDrop = { index: targetIndex, insertAfter };
     dropTargetRef.current = newDrop;
     setDropTarget(newDrop);
-  };
+  }, []);
 
-  const handleRowDragEnd = (e: React.PointerEvent) => {
+  const handleRowDragEnd = useCallback((e: React.PointerEvent) => {
     const drag = pointerDragRef.current;
     if (!drag || e.pointerId !== drag.pointerId) return;
 
@@ -592,25 +828,25 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
     setTimeout(() => {
       isDraggingRef.current = false;
     }, 100);
-  };
+  }, []);
 
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
           key="mobile-now-playing-modal"
-          initial={{ y: "100%" }}
-          animate={{ y: 0 }}
-          exit={{ y: "100%" }}
-          transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
-          className="fixed inset-0 z-50 flex flex-col bg-[#050505] text-foreground select-none overflow-hidden"
+          initial={{ y: "100%", opacity: 0.8 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: "100%", opacity: 0.8 }}
+          transition={{ type: "spring", stiffness: 340, damping: 32, mass: 0.8 }}
+          className="fixed inset-0 z-50 flex flex-col bg-[#050505] text-foreground select-none overflow-hidden transform-gpu will-change-transform"
         >
           {/* Dynamic Ambient Background reacting to Artwork */}
-          {currentTrack?.artworkUrl && (
+          {hdArtworkUrl && (
             <div
-              key={currentTrack.artworkUrl}
-              className="absolute inset-0 -z-20 pointer-events-none scale-150 bg-cover bg-center opacity-30 blur-3xl transition-opacity duration-700"
-              style={{ backgroundImage: `url("${currentTrack.artworkUrl}")` }}
+              key={hdArtworkUrl}
+              className="absolute inset-0 -z-20 pointer-events-none scale-125 bg-cover bg-center opacity-30 blur-2xl transition-opacity duration-700 transform-gpu translate-z-0"
+              style={{ backgroundImage: `url("${hdArtworkUrl}")` }}
             />
           )}
           <div className="absolute inset-0 -z-10 pointer-events-none bg-gradient-to-b from-black/40 via-[#0a0a0a]/80 to-[#050505]" />
@@ -729,9 +965,27 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
                         </h2>
                         <ChevronRightIcon size={18} className="text-white/60 shrink-0" />
                       </div>
-                      <p className="truncate text-sm font-normal text-white/70 mt-0.5">
-                        {currentTrack?.artist || "Unknown Artist"}
-                      </p>
+                      <div className="mt-1 flex items-center min-w-0">
+                        {currentTrack ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const primaryArtist = currentTrack.artists?.[0] ?? {
+                                id: "",
+                                name: currentTrack.artist || "Unknown Artist",
+                              };
+                              handleArtistClick(primaryArtist);
+                            }}
+                            className="truncate text-sm font-medium text-white/75 hover:text-white active:text-primary transition-colors text-left underline-offset-2 hover:underline focus:outline-none"
+                          >
+                            {currentTrack.artist || "Unknown Artist"}
+                          </button>
+                        ) : (
+                          <p className="truncate text-sm font-normal text-white/70">
+                            Unknown Artist
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     {/* ACTION PILLS ROW (Like/Dislike, Lyrics, Save, Share, Download) */}
@@ -840,33 +1094,39 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
                     {/* MAIN TRANSPORT CONTROLS */}
                     <div className="flex items-center justify-between w-full px-2 mt-2 mb-1">
                       {/* Shuffle */}
-                      <button
+                      <motion.button
                         type="button"
                         onClick={() => playerController.toggleShuffle()}
+                        whileTap={{ scale: 0.82 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 20 }}
                         className={cn(
-                          "flex size-11 items-center justify-center transition-colors active:scale-90",
+                          "flex size-11 items-center justify-center transition-colors",
                           isShuffle ? "text-white" : "text-white/70 hover:text-white",
                         )}
                         aria-label="Shuffle"
                       >
                         {isShuffle ? <ShuffleActiveIcon size={24} /> : <ShuffleIcon size={24} />}
-                      </button>
+                      </motion.button>
 
                       {/* Skip Previous */}
-                      <button
+                      <motion.button
                         type="button"
                         onClick={() => void playerController.skipToPrevious()}
-                        className="flex size-12 items-center justify-center text-white transition-transform active:scale-90 hover:opacity-80"
+                        whileTap={{ scale: 0.84 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                        className="flex size-12 items-center justify-center text-white transition-opacity hover:opacity-80"
                         aria-label="Previous track"
                       >
                         <SkipPreviousIcon size={32} />
-                      </button>
+                      </motion.button>
 
                       {/* Big White Circular Play/Pause */}
-                      <button
+                      <motion.button
                         type="button"
                         onClick={() => void playerController.togglePlayPause()}
-                        className="flex size-16 items-center justify-center rounded-full bg-white text-black shadow-2xl transition-transform active:scale-90 hover:scale-105"
+                        whileTap={{ scale: 0.88 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 22 }}
+                        className="flex size-16 items-center justify-center rounded-full bg-white text-black shadow-2xl hover:scale-105 transition-transform"
                         aria-label={isPlaying ? "Pause" : "Play"}
                       >
                         {isLoading ? (
@@ -876,24 +1136,28 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
                         ) : (
                           <PlayActiveIcon size={32} className="translate-x-0.5" />
                         )}
-                      </button>
+                      </motion.button>
 
                       {/* Skip Next */}
-                      <button
+                      <motion.button
                         type="button"
                         onClick={() => void playerController.skipToNext()}
-                        className="flex size-12 items-center justify-center text-white transition-transform active:scale-90 hover:opacity-80"
+                        whileTap={{ scale: 0.84 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                        className="flex size-12 items-center justify-center text-white transition-opacity hover:opacity-80"
                         aria-label="Next track"
                       >
                         <SkipNextIcon size={32} />
-                      </button>
+                      </motion.button>
 
                       {/* Repeat */}
-                      <button
+                      <motion.button
                         type="button"
                         onClick={() => playerController.cyclePlaybackOrderMode()}
+                        whileTap={{ scale: 0.82 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 20 }}
                         className={cn(
-                          "flex size-11 items-center justify-center transition-colors active:scale-90",
+                          "flex size-11 items-center justify-center transition-colors",
                           isRepeatAll || isRepeatOne
                             ? "text-white"
                             : "text-white/70 hover:text-white",
@@ -907,7 +1171,7 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
                         ) : (
                           <RepeatIcon size={24} />
                         )}
-                      </button>
+                      </motion.button>
                     </div>
                   </div>
                 </div>
@@ -1137,7 +1401,7 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
               onTouchStart={handleQueueListTouchStart}
               onTouchMove={handleQueueListTouchMove}
               onTouchEnd={handleQueueListTouchEnd}
-              className="flex-1 overflow-y-auto overscroll-contain px-4 pb-20 touch-pan-y divide-y divide-white/5"
+              className="flex-1 overflow-y-auto overscroll-contain px-3 pb-20 touch-pan-y"
             >
               {upcomingTracks.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center text-white/50 text-xs">
@@ -1145,51 +1409,25 @@ export function MobileNowPlayingModal({ isOpen, onClose }: MobileNowPlayingModal
                 </div>
               ) : (
                 upcomingTracks.map(({ track, absoluteIndex }) => (
-                  <div
+                  <SwipeableQueueRow
                     key={`${track.id}-${absoluteIndex}`}
-                    data-queue-index={absoluteIndex}
-                    onClick={() => {
-                      if (!isDraggingRef.current) {
-                        void playerController.playQueueTrackAt(absoluteIndex);
-                      }
-                    }}
-                    onPointerMove={handleRowDragMove}
-                    onPointerUp={handleRowDragEnd}
-                    onPointerCancel={handleRowDragEnd}
-                    className={cn(
-                      "flex items-center justify-between gap-3 py-2.5 transition-all cursor-pointer rounded-lg px-2 group relative select-none",
-                      draggedIndex === absoluteIndex ? "bg-white/10 opacity-50 scale-[1.01]" : "active:bg-white/5",
-                      dropTarget?.index === absoluteIndex && dropTarget.insertAfter && "border-b-2 border-primary pb-1",
-                      dropTarget?.index === absoluteIndex && !dropTarget.insertAfter && "border-t-2 border-primary pt-1",
-                    )}
-                  >
-                    <div className="size-11 shrink-0 overflow-hidden rounded-lg shadow-sm border border-white/10">
-                      <TrackArtwork
-                        artworkUrl={track.artworkUrl}
-                        size={44}
-                        className="size-full object-cover"
-                      />
-                    </div>
-
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm font-semibold text-white group-hover:text-primary transition-colors">
-                        {track.title}
-                      </span>
-                      <span className="truncate text-xs font-medium text-white/60">
-                        {track.artist || "Unknown Artist"}
-                        {track.durationSec ? ` • ${formatMinutesSeconds(track.durationSec)}` : ""}
-                      </span>
-                    </div>
-
-                    <div
-                      onPointerDown={(e) => handleRowDragStart(e, absoluteIndex)}
-                      className="flex size-10 shrink-0 items-center justify-center text-white/50 hover:text-white active:text-white cursor-grab active:cursor-grabbing touch-none"
-                      aria-label="Hold and drag to reorder"
-                      title="Hold and drag to reorder"
-                    >
-                      <DragHandleIcon size={22} />
-                    </div>
-                  </div>
+                    track={track}
+                    absoluteIndex={absoluteIndex}
+                    isDragged={draggedIndex === absoluteIndex}
+                    dropEdge={
+                      dropTarget?.index === absoluteIndex
+                        ? dropTarget.insertAfter
+                          ? "after"
+                          : "before"
+                        : null
+                    }
+                    onPlay={handlePlayQueueTrack}
+                    onInstantPlay={handleInstantPlayTrack}
+                    onRemove={handleRemoveTrack}
+                    onDragStart={handleRowDragStart}
+                    onDragMove={handleRowDragMove}
+                    onDragEnd={handleRowDragEnd}
+                  />
                 ))
               )}
             </div>

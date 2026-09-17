@@ -1,0 +1,87 @@
+name: Build iOS App
+
+on:
+  workflow_dispatch:
+    inputs:
+      export_method:
+        description: 'Export method (development, ad-hoc, or enterprise)'
+        required: false
+        default: 'development'
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'package.json'
+      - 'vite.config.ts'
+      - '.github/workflows/build_ios.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ios
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Initialize Tauri iOS project (if needed)
+        run: |
+          if [ ! -d "src-tauri/gen/apple" ]; then
+            echo "Initializing Tauri iOS project..."
+            npx tauri ios init
+          else
+            echo "Tauri iOS project already exists."
+          fi
+
+      - name: Build Web Frontend
+        run: npm run build
+
+      - name: Build Tauri iOS App
+        run: |
+          npx tauri ios build --no-signing
+
+      - name: Prepare Artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          if [ -d "src-tauri/gen/apple/build" ]; then
+            cd src-tauri/gen/apple/build
+            zip -r ../../../../artifacts/neno-ios-build.zip .
+            cd ../../../..
+          else
+            echo "Search for compiled app/ipa files:"
+            find src-tauri/gen/apple -name "*.app" -o -name "*.ipa" -o -name "*.dylib"
+            zip -r artifacts/neno-ios-gen.zip src-tauri/gen/apple
+          fi
+
+      - name: Upload iOS Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Neno-iOS-Build
+          path: artifacts/*.zip
+          retention-days: 14

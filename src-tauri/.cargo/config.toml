@@ -11,7 +11,7 @@
 # libopus, or when the crate stops vendoring one.
 [env]
 CMAKE_POLICY_VERSION_MINIMUM = "3.5"
-CMAKE_TOOLCHAIN_FILE = "C:\\Flutter\\Projects\\zuno-main\\src-tauri\\android-wrapper.toolchain.cmake"
+CMAKE_TOOLCHAIN_FILE = "C:\\Flutter\\Projects\\Neno Music\\src-tauri\\android-wrapper.toolchain.cmake"
 ANDROID_NDK = "C:\\Users\\wwwro\\AppData\\Local\\Android\\Sdk\\ndk\\28.2.13676358"
 ANDROID_NDK_HOME = "C:\\Users\\wwwro\\AppData\\Local\\Android\\Sdk\\ndk\\28.2.13676358"
 CMAKE_MAKE_PROGRAM = "C:\\Users\\wwwro\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe"

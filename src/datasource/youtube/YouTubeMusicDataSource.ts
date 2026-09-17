@@ -78,6 +78,36 @@ import {
 } from "./tauriFetch";
 
 type ClientLabel = "music" | "web" | "download";
+
+type CachedResolvedStream = {
+  url: string;
+  mimeType: string;
+  cookie?: string;
+  expiresAt: number;
+};
+
+const STREAM_URL_CACHE_TTL_MS = 45 * 60 * 1000;
+const MAX_STREAM_URL_CACHE_ENTRIES = 120;
+const streamUrlCache = new Map<string, CachedResolvedStream>();
+const inFlightStreamResolves = new Map<string, Promise<{ url: string; mimeType: string; cookie?: string }>>();
+
+function getCachedStreamUrl(key: string): { url: string; mimeType: string; cookie?: string } | null {
+  const entry = streamUrlCache.get(key);
+  if (!entry) return null;
+  if (Date.now() >= entry.expiresAt) {
+    streamUrlCache.delete(key);
+    return null;
+  }
+  return { url: entry.url, mimeType: entry.mimeType, cookie: entry.cookie };
+}
+
+function setCachedStreamUrl(key: string, data: { url: string; mimeType: string; cookie?: string }): void {
+  if (streamUrlCache.size >= MAX_STREAM_URL_CACHE_ENTRIES) {
+    const oldestKey = streamUrlCache.keys().next().value;
+    if (oldestKey) streamUrlCache.delete(oldestKey);
+  }
+  streamUrlCache.set(key, { ...data, expiresAt: Date.now() + STREAM_URL_CACHE_TTL_MS });
+}
 type NativeAudioPayload = {
   bodyBase64: string;
   mimeType: string;
@@ -624,31 +654,7 @@ export class YouTubeMusicDataSource extends DataSource {
     warmPoToken();
   }
 
-  /**
-   * Binds a fresh PO token to one track and arms the client with it.
-   *
-   * The binding is the **video ID**, which is the only one of the four plausible candidates that
-   * actually works. Measured, because reasoning got it wrong three times: with the same session
-   * and the same track, a token bound to the visitor ID, to the account's Data Sync ID, or to
-   * the visitor ID of an authenticated session all left the URL refusing every byte past 1 MiB,
-   * while a video-bound token served the whole file.
-   *
-   * Set in two places for two different reasons — `session.po_token` is what the /player call
-   * carries, and `player.po_token` is what gets stamped onto the URL as `pot`. The URL is only
-   * ungated when the call that minted it was attested, so the first is the one that matters and
-   * the second keeps the URL self-consistent.
-   *
-   * Cheap per track: minting is local arithmetic against an integrity token that is fetched once
-   * and cached for its full twelve hours.
-   */
-  private async attestForTrack(client: Innertube, trackId: string): Promise<string | undefined> {
-    const poToken = await mintPoToken(trackId);
-    if (!poToken) return undefined;
 
-    client.session.po_token = poToken;
-    if (client.session.player) client.session.player.po_token = poToken;
-    return poToken;
-  }
 
   /**
    * Runs one download-client resolve at a time.
@@ -5729,35 +5735,36 @@ export class YouTubeMusicDataSource extends DataSource {
     quality: AudioQuality,
     clientOrder: readonly ClientLabel[],
   ): Promise<{ url: string; mimeType: string; cookie?: string }> {
-    let streamUrl: string | null = null;
-    let streamMimeType = "audio/mp4";
+    const cacheKey = `${track.id}:${quality}:${clientOrder.join(",")}`;
+    const cached = getCachedStreamUrl(cacheKey);
+    if (cached) {
+      logInternalInfo("YouTubeMusicDataSource.resolveStream cache hit", { trackId: track.id });
+      return cached;
+    }
 
-    /*
-     * The walk itself holds no policy — the order is handed in. Whichever client comes first is
-     * tried first and the rest are fallbacks for tracks it cannot see, which is real for
-     * Music-exclusive content.
-     */
-    for (const label of clientOrder) {
-      try {
-        const resolveWithClient = async (): Promise<void> => {
+    const inFlight = inFlightStreamResolves.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const resolvePromise = (async () => {
+      let streamUrl: string | null = null;
+      let streamMimeType = "audio/mp4";
+
+      for (const label of clientOrder) {
+        try {
           const yt = await this.getClient(label);
           // Both download and music clients are attested with a PO token so playback streams
           // do not get cut off with 403 after the first range chunk (~1 MiB / 128KB).
+          // Minting is stateless per track, so it runs immediately without locking.
           const poToken =
             (label === "download" || label === "music")
-              ? await this.attestForTrack(yt, track.id)
+              ? await mintPoToken(track.id)
               : undefined;
+
+          // Network request to YouTube runs completely concurrently without blocking other tracks.
           const info = await yt.getBasicInfo(track.id, poToken ? { po_token: poToken } : undefined);
-          /*
-           * MP4 preferred, any audio accepted.
-           *
-           * Filtering to audio/mp4 alone is why some songs refused to download while playing
-           * perfectly: YouTube serves Opus-in-WebM as the *only* audio for a large share of
-           * tracks, and playback never noticed because it goes through the iframe player rather
-           * than this resolver. The offline store serves files back with their recorded mime
-           * type and the webview decodes WebM natively, so there is nothing to gain by
-           * insisting on MP4 — only tracks to lose.
-           */
+
           const audioFormats = (info.streaming_data?.adaptive_formats ?? []).filter(
             (candidate: any) => typeof candidate.mime_type === "string"
               && candidate.mime_type.startsWith("audio/"),
@@ -5765,13 +5772,6 @@ export class YouTubeMusicDataSource extends DataSource {
           const mp4Formats = audioFormats.filter(
             (candidate: any) => candidate.mime_type.includes("audio/mp4"),
           );
-          /*
-           * "Best available" has to mean it. The MP4 preference used to be applied before the
-           * quality ranking, so `high` never saw the Opus tier — on a typical track that pinned
-           * it to itag 140 at ~128 kbps while itag 251 sat there at ~160, higher bitrate *and*
-           * better per bit. `low` and `normal` keep preferring MP4: they are picking a small file
-           * and AAC is the safer container to hand a media element.
-           */
           const candidates = quality === "high" || mp4Formats.length === 0
             ? audioFormats
             : mp4Formats;
@@ -5779,8 +5779,6 @@ export class YouTubeMusicDataSource extends DataSource {
             | (typeof candidates)[number]
             | undefined;
           if (!format) {
-            // Names what was actually on offer, so a future failure is diagnosable from the log
-            // instead of needing another round trip.
             const offered = (info.streaming_data?.adaptive_formats ?? [])
               .map((candidate: any) => candidate.mime_type)
               .filter(Boolean)
@@ -5790,25 +5788,27 @@ export class YouTubeMusicDataSource extends DataSource {
             );
           }
 
-          /*
-           * Unconditionally deciphered, unlike the getStreamingData path above. These formats
-           * come raw off getBasicInfo and nothing has touched them yet, so a plain `format.url`
-           * here still carries an untransformed throttling `n` and no `pot`. Taking it as-is is
-           * why downloads 403'd while playback — which goes through getStreamingData — worked.
-           *
-           * Locked end-to-end for the download and music clients (see withDownloadLock): `decipher` reads
-           * `yt.session.player.po_token`, the same mutable field `attestForTrack` above just
-           * wrote — the only place youtubei.js keeps it, with no parameter to pass it through
-           * instead. Without the lock, a concurrent resolve for another track (routine: the next
-           * track warms while this one is still loading) can mint and overwrite that field in
-           * the gap, and this track's URL goes out stamped with a token bound to a different
-           * video. googlevideo serves such a URL's first ~1 MiB — the same grace an unattested
-           * request gets — then refuses the rest.
-           */
-          const decipheredUrl = this.withSessionClientVersion(
-            await format.decipher(yt.session.player),
-            yt,
-          );
+          // Micro-scoped lock: only format.decipher touches yt.session.player.po_token.
+          // The lock is held for <0.1ms (local JS decipher) rather than across network requests.
+          let decipheredUrl: string | null = null;
+          if (poToken && (label === "download" || label === "music")) {
+            decipheredUrl = await this.withDownloadLock(async () => {
+              yt.session.po_token = poToken;
+              if (yt.session.player) {
+                yt.session.player.po_token = poToken;
+              }
+              return this.withSessionClientVersion(
+                await format.decipher(yt.session.player),
+                yt,
+              );
+            });
+          } else {
+            decipheredUrl = this.withSessionClientVersion(
+              await format.decipher(yt.session.player),
+              yt,
+            );
+          }
+
           if (!decipheredUrl) {
             throw new Error("YouTube returned an empty MP4 audio URL.");
           }
@@ -5823,32 +5823,33 @@ export class YouTubeMusicDataSource extends DataSource {
             mimeType: streamMimeType,
             bitrate: (format as any).bitrate ?? null,
           });
-        };
-
-        if (label === "download" || label === "music") {
-          await this.withDownloadLock(resolveWithClient);
-        } else {
-          await resolveWithClient();
+          break;
+        } catch (error) {
+          logInternalWarn("YouTubeMusicDataSource.getStreamData client failed", {
+            trackId: track.id,
+            client: label,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
-        break;
-      } catch (error) {
-        logInternalWarn("YouTubeMusicDataSource.getStreamData client failed", {
-          trackId: track.id,
-          client: label,
-          error: error instanceof Error ? error.message : String(error),
-        });
       }
-    }
 
-    if (!streamUrl) {
-      throw new Error("Unable to resolve a playable audio stream.");
-    }
+      if (!streamUrl) {
+        throw new Error("Unable to resolve a playable audio stream.");
+      }
 
-    return {
-      url: streamUrl,
-      mimeType: streamMimeType,
-      cookie: this.musicCookie ?? undefined,
-    };
+      const resolved = {
+        url: streamUrl,
+        mimeType: streamMimeType,
+        cookie: this.musicCookie ?? undefined,
+      };
+      setCachedStreamUrl(cacheKey, resolved);
+      return resolved;
+    })().finally(() => {
+      inFlightStreamResolves.delete(cacheKey);
+    });
+
+    inFlightStreamResolves.set(cacheKey, resolvePromise);
+    return resolvePromise;
   }
 
   /**

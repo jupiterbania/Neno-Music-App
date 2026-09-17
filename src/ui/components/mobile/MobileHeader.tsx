@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "motion/react";
 import { RefreshIcon, SearchIcon } from "@/ui/icons";
 import { cn } from "@/lib/utils";
 import appIcon from "../../../../assets/img/Logo.png";
@@ -39,69 +40,79 @@ export function MobileHeader({
   };
 
   return (
-    <header className="sticky top-0 z-20 -mx-2 -mt-2 mb-1 flex h-11 items-center justify-between gap-2 bg-background/95 backdrop-blur-2xl px-3 py-1 transition-colors border-b border-border/25">
+    <header className="sticky top-0 z-20 -mx-2 -mt-2 mb-2 flex h-14 items-center justify-between gap-2.5 bg-background/95 backdrop-blur-2xl px-3.5 py-2 transition-colors border-b border-white/10">
       {/* Brand Identity */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-card border border-border/40 shadow-xs">
-          <img src={appIcon} alt="Neno" className="size-5 object-contain" />
+      <motion.div
+        whileTap={{ scale: 0.95 }}
+        transition={{ type: "spring", stiffness: 400, damping: 25 }}
+        className="flex items-center gap-2.5 cursor-pointer select-none"
+      >
+        <div className="relative flex size-8.5 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-card border border-white/10 shadow-xs">
+          <img src={appIcon} alt="Neno" className="size-6 object-contain" />
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-sm font-extrabold tracking-tight text-foreground leading-none">
+          <span className="text-base font-extrabold tracking-tight text-foreground leading-none">
             Neno
           </span>
-          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary tracking-wide uppercase">
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary tracking-wide uppercase">
             Music
           </span>
         </div>
-      </div>
+      </motion.div>
 
       {/* Right Actions: Refresh, Search & Account */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
         {onRefresh && (
-          <button
+          <motion.button
             type="button"
             onClick={onRefresh}
             disabled={isRefreshing}
-            className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-card hover:text-foreground active:scale-90 disabled:opacity-50"
+            whileTap={{ scale: 0.85 }}
+            transition={{ type: "spring", stiffness: 500, damping: 20 }}
+            className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card hover:text-foreground disabled:opacity-50"
             aria-label="Refresh recommendations"
             title="Refresh recommendations"
           >
             <RefreshIcon
-              size={17}
+              size={19}
               className={cn("transition-transform duration-500", isRefreshing && "animate-spin text-primary")}
             />
-          </button>
+          </motion.button>
         )}
 
-        <button
+        <motion.button
           type="button"
           onClick={onOpenSearch}
-          className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-card hover:text-foreground active:scale-90"
+          whileTap={{ scale: 0.85 }}
+          transition={{ type: "spring", stiffness: 500, damping: 20 }}
+          className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
           aria-label="Search"
         >
-          <SearchIcon size={18} />
-        </button>
+          <SearchIcon size={20} />
+        </motion.button>
 
         {isSignedIn ? (
-          <button
+          <motion.button
             type="button"
             onClick={onOpenSettings}
-            className="group relative flex size-7 shrink-0 items-center justify-center rounded-full ring-1.5 ring-primary/40 transition-transform active:scale-90 hover:ring-primary"
+            whileTap={{ scale: 0.88 }}
+            transition={{ type: "spring", stiffness: 500, damping: 20 }}
+            className="group relative flex size-8 shrink-0 items-center justify-center rounded-full ring-2 ring-primary/40 transition-transform hover:ring-primary"
             aria-label="Account profile"
           >
             <AccountAvatar
               artworkUrl={account?.artworkUrl}
-              className="size-6"
-              iconSize={14}
+              className="size-7"
+              iconSize={15}
             />
-            <span className="absolute bottom-0 right-0 size-1.5 rounded-full bg-emerald-500 ring-1 ring-background" />
-          </button>
+            <span className="absolute bottom-0 right-0 size-2 rounded-full bg-emerald-500 ring-1.5 ring-background animate-pulse" />
+          </motion.button>
         ) : (
           <GoogleSignInButton
             onClick={() => void handleSignIn()}
             isBusy={isSigningIn}
             size="sm"
-            className="h-7 px-2.5 py-0 text-xs gap-1 shadow-xs"
+            className="h-8 px-3 py-0 text-xs font-semibold gap-1.5 shadow-xs"
           />
         )}
       </div>

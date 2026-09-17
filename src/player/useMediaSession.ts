@@ -6,6 +6,7 @@ import type { PlayerControllerActions } from "./playerStore";
 import { logInternalWarn } from "../internal/logging";
 import { useLinuxMediaSession } from "../ui/settings/mediaSession";
 import { isLinux } from "../ui/platform";
+import { getArtworkUrlCandidates } from "../datasource/youtube/artwork";
 
 type NativeMediaAction =
   | "play"
@@ -53,7 +54,7 @@ function getNativeMediaControlEvent(linuxEnabled: boolean): string | null {
 }
 
 function getBrowserPlaybackState(status: PlayerState["status"]): MediaSessionPlaybackState {
-  if (status === "playing" || status === "loading") return "playing";
+  if (status === "playing") return "playing";
   if (status === "paused") return "paused";
   return "none";
 }
@@ -242,19 +243,22 @@ export function useMediaSession(
 
     const track = state.currentTrack;
     try {
+      // Use the highest-resolution artwork available so the OS notification card /
+      // lock screen always shows a sharp poster rather than a raw thumbnail.
+      const hdUrl = track?.artworkUrl
+        ? (getArtworkUrlCandidates(track.artworkUrl)[0] ?? track.artworkUrl)
+        : null;
       navigator.mediaSession.metadata = track
         ? new MediaMetadata({
             title: track.title,
             artist: track.artist,
             album: track.album || "Neno Music",
-            artwork: track.artworkUrl
+            artwork: hdUrl
               ? [
-                  { src: track.artworkUrl, sizes: "96x96", type: "image/jpeg" },
-                  { src: track.artworkUrl, sizes: "128x128", type: "image/jpeg" },
-                  { src: track.artworkUrl, sizes: "192x192", type: "image/jpeg" },
-                  { src: track.artworkUrl, sizes: "256x256", type: "image/jpeg" },
-                  { src: track.artworkUrl, sizes: "384x384", type: "image/jpeg" },
-                  { src: track.artworkUrl, sizes: "512x512", type: "image/jpeg" },
+                  { src: hdUrl, sizes: "128x128", type: "image/jpeg" },
+                  { src: hdUrl, sizes: "256x256", type: "image/jpeg" },
+                  { src: hdUrl, sizes: "512x512", type: "image/jpeg" },
+                  { src: hdUrl, sizes: "1280x720", type: "image/jpeg" },
                 ]
               : [],
           })

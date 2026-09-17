@@ -8,6 +8,8 @@ import {
 } from "@/ui/icons";
 import { primaryModifierLabel } from "../platform";
 import { useReduceMotion } from "../settings/renderEffects";
+import { useIsMobile } from "../hooks/useIsMobile";
+import { MobileOnboarding } from "./MobileOnboarding";
 import {
   CARD_WIDTH,
   ONBOARDING_STEPS,
@@ -172,6 +174,12 @@ interface OnboardingProps {
 }
 
 export function Onboarding({ step, onSkip, onSkipStep, onBack }: OnboardingProps) {
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return <MobileOnboarding onFinish={onSkip} onSkip={onSkip} />;
+  }
+
   // The typewriter is a JS timer, so no stylesheet can stop it — this is the hook that can.
   const reduceMotion = useReduceMotion();
   const content = getStepContent()[step];

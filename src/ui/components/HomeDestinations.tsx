@@ -93,7 +93,7 @@ export function HomeDestinations({
             whileTap={{ scale: 0.97 }}
             transition={{ type: "spring", stiffness: 500, damping: 30 }}
             className={cn(
-              "group/dest flex items-center gap-3 overflow-hidden rounded-2xl bg-card/75 backdrop-blur-md p-3 text-left border border-border/50",
+              "group/dest flex items-center gap-3 overflow-hidden rounded-2xl bg-card p-3 text-left border border-border/50",
               "transition-all hover:bg-card hover:border-border/80 shadow-xs",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}

@@ -72,7 +72,7 @@ export function MobileBottomNav({
     <nav
       aria-label="Mobile Navigation"
       className={cn(
-        "w-full flex items-center justify-around border-t border-border/40 bg-background/90 backdrop-blur-2xl px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom,0px),8px)] shadow-[0_-8px_24px_rgba(0,0,0,0.35)] select-none",
+        "w-full flex items-center justify-around border-t border-white/10 bg-background/90 backdrop-blur-2xl px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom,0px),8px)] shadow-[0_-8px_24px_rgba(0,0,0,0.4)] select-none",
         className,
       )}
     >
@@ -81,24 +81,40 @@ export function MobileBottomNav({
           key={item.id}
           type="button"
           onClick={item.onClick}
-          whileTap={{ scale: 0.92 }}
-          transition={{ type: "spring", stiffness: 500, damping: 28 }}
+          whileTap={{ scale: 0.88 }}
+          transition={{ type: "spring", stiffness: 500, damping: 25 }}
           className={cn(
-            "relative flex flex-1 flex-col items-center justify-center gap-1 py-1 transition-colors",
+            "relative flex flex-1 flex-col items-center justify-center gap-1 py-1.5 transition-colors rounded-xl",
             item.isActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
           )}
           aria-label={item.label}
         >
-          <div className="relative">
+          {/* Sliding glowing active background pill */}
+          {item.isActive && (
+            <motion.div
+              layoutId="mobileNavActivePill"
+              transition={{ type: "spring", stiffness: 450, damping: 32 }}
+              className="absolute inset-0 bg-primary/10 rounded-xl -z-10 shadow-[0_0_16px_rgba(255,0,51,0.15)]"
+            />
+          )}
+
+          <motion.div
+            animate={{
+              scale: item.isActive ? 1.08 : 1,
+              y: item.isActive ? -1 : 0,
+            }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            className="relative"
+          >
             {item.isActive ? (
-              <item.ActiveIcon size={22} className="transition-transform duration-200" />
+              <item.ActiveIcon size={22} className="text-primary drop-shadow-[0_2px_8px_rgba(255,0,51,0.4)]" />
             ) : (
-              <item.InactiveIcon size={22} className="transition-transform duration-200" />
+              <item.InactiveIcon size={22} className="text-muted-foreground" />
             )}
-          </div>
+          </motion.div>
           <span
             className={cn(
-              "text-[10px] tracking-tight leading-tight",
+              "text-[10px] tracking-tight leading-tight transition-all",
               item.isActive ? "font-bold text-primary" : "font-medium text-muted-foreground",
             )}
           >
