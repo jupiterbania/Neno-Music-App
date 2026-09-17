@@ -39,7 +39,9 @@ dist-ssr
 outputs/*
 .codex/*
 release-ios/
+release-ios-latest/
 artifacts/
+Neno-Music.ipa
 
 # Crash droppings from the Git-for-Windows shell.
 *.stackdump

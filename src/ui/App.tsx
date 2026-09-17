@@ -34,6 +34,9 @@ const HistoryPage = lazy(() =>
 );
 const SettingsPage = lazy(() =>
   import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
+const SpeedDialPage = lazy(() =>
+  import("./pages/SpeedDialPage").then((m) => ({ default: m.SpeedDialPage })),
+);
 const LyricsView = lazy(() => import("./pages/LyricsView").then((m) => ({ default: m.LyricsView })));
 import { SearchOverlay } from "./components/SearchOverlay";
 import { TrackContextMenuProvider } from "./components/TrackContextMenu";
@@ -209,6 +212,8 @@ function getNavigationKey(state: TabViewState): string {
       return "browse";
     case "library":
       return "library";
+    case "speed-dial":
+      return "speed-dial";
   }
 }
 
@@ -929,6 +934,14 @@ export default function App() {
       title: activeTab?.title,
       view: "album",
       album,
+    });
+  };
+
+  const handleNavigateSpeedDial = () => {
+    playerUIStore.setLyricsOpen(false);
+    navigateTab(activeTabId, {
+      title: "Speed dial",
+      view: "speed-dial",
     });
   };
 
@@ -2162,6 +2175,18 @@ export default function App() {
                 destinations={homeDestinations}
                 onOpenSearch={() => setIsSearchOpen(true)}
                 onOpenSettings={handleOpenSettings}
+                onOpenSpeedDial={handleNavigateSpeedDial}
+                onOpenAlbum={handleNavigateAlbum}
+                onOpenArtist={handleNavigateArtist}
+                onOpenPlaylist={handleNavigatePlaylist}
+              />
+            )}
+            {activeTab?.view === "speed-dial" && (
+              <SpeedDialPage
+                playerController={playerController}
+                libraryController={libraryController}
+                libraryState={libraryState}
+                onBack={handleNavigateBack}
                 onOpenAlbum={handleNavigateAlbum}
                 onOpenArtist={handleNavigateArtist}
                 onOpenPlaylist={handleNavigatePlaylist}

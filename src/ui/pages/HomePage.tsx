@@ -14,6 +14,7 @@ import { useTrackContextMenu } from "../components/TrackContextMenu";
 import { HomeDestinations, type HomeDestinationHandlers } from "../components/HomeDestinations";
 import { ArtistLinks } from "../components/ArtistLinks";
 import { BrowseShelves } from "../components/BrowseShelves";
+import { SpeedDialSection } from "../components/SpeedDialSection";
 import { usePlayHistory } from "../../player/playHistory";
 import { useMadeForYouVisible, useYtmHomeFeedVisible } from "../settings/homeSections";
 import { AlbumGridSkeleton, PickCardSkeleton } from "../components/Skeleton";
@@ -131,6 +132,7 @@ interface HomePageProps {
   destinations: HomeDestinationHandlers;
   onOpenSearch?: () => void;
   onOpenSettings?: () => void;
+  onOpenSpeedDial?: () => void;
   onOpenAlbum?: (album: Album) => void;
   onOpenArtist?: (artist: Artist) => void;
   onOpenPlaylist?: (playlist: Playlist) => void;
@@ -147,6 +149,16 @@ function shuffle<T>(items: readonly T[]): T[] {
 
 function uniqueTracks(tracks: readonly Track[]): Track[] {
   return [...new Map(tracks.map((track) => [track.id, track])).values()];
+}
+
+function isSpeedDialOrListenAgainTitle(title: string): boolean {
+  const t = title.toLowerCase().trim();
+  return (
+    t.includes("speed dial") ||
+    t.includes("स्पीड डायल") ||
+    t.includes("listen again") ||
+    t.includes("फिर से सुनें")
+  );
 }
 
 function isListenAgainTitle(title: string): boolean {
@@ -174,6 +186,7 @@ export function HomePage({
   destinations,
   onOpenSearch,
   onOpenSettings,
+  onOpenSpeedDial,
   onOpenAlbum,
   onOpenArtist,
   onOpenPlaylist,
@@ -229,6 +242,15 @@ export function HomePage({
   );
   const [isLoadingHomeFeed, setIsLoadingHomeFeed] = useState(false);
 
+  const speedDialShelf = useMemo(() => {
+    return ytmHomeFeed?.shelves.find((shelf) => isSpeedDialOrListenAgainTitle(shelf.title)) ?? null;
+  }, [ytmHomeFeed]);
+
+  const speedDialTracks = useMemo(() => {
+    const fromShelf = speedDialShelf?.tracks ?? [];
+    return uniqueTracks([...fromShelf, ...recentPlays]);
+  }, [speedDialShelf, recentPlays]);
+
   const hasYtmListenAgain = useMemo(
     () =>
       showYtmHomeFeed &&
@@ -239,14 +261,17 @@ export function HomePage({
   );
 
   /**
-   * Reorders YouTube Music shelves so that "Quick picks" is positioned where "Listen again"
-   * was, and "Listen again" takes "Quick picks"'s place (swapping their positions).
+   * Reorders YouTube Music shelves so that "Quick picks" is positioned first,
+   * while filtering out the "Speed dial" / "Listen again" shelf (rendered in SpeedDialSection).
    */
   const orderedShelves = useMemo(() => {
     if (!ytmHomeFeed?.shelves || ytmHomeFeed.shelves.length === 0) {
       return [];
     }
-    const shelves = [...ytmHomeFeed.shelves];
+    const nonSpeedDialShelves = ytmHomeFeed.shelves.filter(
+      (shelf) => !isSpeedDialOrListenAgainTitle(shelf.title),
+    );
+    const shelves = [...nonSpeedDialShelves];
     const quickPicksIdx = shelves.findIndex((shelf) => isQuickPicksTitle(shelf.title));
 
     if (quickPicksIdx > 0) {
@@ -603,7 +628,18 @@ export function HomePage({
       {/* ── 1. Made for you ──────────────────────────────────────────────── */}
       {showMadeForYou && madeForYouSection}
 
-      {/* ── 2. Library & Browse Destinations ─────────────────────────────── */}
+      {/* ── 2. Speed dial (Only when signed in) ─────────────────────────── */}
+      {libraryState.status === "ready" && speedDialTracks.length > 0 && (
+        <SpeedDialSection
+          tracks={speedDialTracks}
+          account={libraryState.library?.account}
+          playerController={playerController}
+          onOpenSpeedDial={onOpenSpeedDial}
+          isLoading={isLoadingHomeFeed && speedDialTracks.length === 0}
+        />
+      )}
+
+      {/* ── 3. Library & Browse Destinations ─────────────────────────────── */}
       <HomeDestinations {...destinations} />
 
       {/* ── 3. Quick Picks ───────────────────────────────────────────────── */}
