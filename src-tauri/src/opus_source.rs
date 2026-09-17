@@ -10,7 +10,7 @@
  * have decoders for those. This module exists for exactly one codec.
  */
 
-use std::collections::VecDeque;
+// VecDeque removed: sample buffer is now Vec<f32> + read cursor (see OpusSource).
 use std::time::Duration;
 
 use rodio::{ChannelCount, SampleRate, Source};
@@ -125,7 +125,13 @@ pub(crate) struct OpusSource {
     track_id: u32,
     channels: ChannelCount,
     /// Decoded samples not yet handed to rodio, interleaved.
-    pending: VecDeque<f32>,
+    ///
+    /// A `Vec` with a read cursor rather than a `VecDeque`: rodio's mixing thread
+    /// calls `next()` at 48 kHz × channel_count, so the hot path is reading sequential
+    /// f32s out of this buffer. A contiguous slice is prefetcher-friendly; a ring buffer
+    /// is not. When `pending_pos` reaches `pending.len()` both are reset to zero.
+    pending: Vec<f32>,
+    pending_pos: usize,
     /// Reused across packets so decoding does not allocate per frame.
     scratch: Vec<f32>,
     total_duration: Option<Duration>,
@@ -205,7 +211,8 @@ impl OpusSource {
             decoder,
             track_id,
             channels,
-            pending: VecDeque::with_capacity(MAX_FRAME_SAMPLES * channel_count),
+            pending: Vec::with_capacity(MAX_FRAME_SAMPLES * channel_count),
+            pending_pos: 0,
             scratch: vec![0.0; MAX_FRAME_SAMPLES * channel_count],
             total_duration,
             skip_samples,
@@ -270,7 +277,13 @@ impl OpusSource {
             if decoded.is_empty() {
                 continue;
             }
-            self.pending.extend(decoded.iter().copied());
+            // If the previous batch was fully consumed, reset rather than appending.
+            // This avoids shifting existing data and keeps the buffer at a stable size.
+            if self.pending_pos >= self.pending.len() {
+                self.pending.clear();
+                self.pending_pos = 0;
+            }
+            self.pending.extend_from_slice(decoded);
             return true;
         }
         false
@@ -282,13 +295,24 @@ impl Iterator for OpusSource {
 
     #[inline]
     fn next(&mut self) -> Option<f32> {
-        if let Some(sample) = self.pending.pop_front() {
+        // Fast path: buffer has samples left — just advance the cursor.
+        if self.pending_pos < self.pending.len() {
+            let sample = self.pending[self.pending_pos];
+            self.pending_pos += 1;
             return Some(sample);
         }
+        // Buffer exhausted: decode next packet.
+        self.pending.clear();
+        self.pending_pos = 0;
         if !self.fill() {
             return None;
         }
-        self.pending.pop_front()
+        if self.pending.is_empty() {
+            return None;
+        }
+        let sample = self.pending[0];
+        self.pending_pos = 1;
+        Some(sample)
     }
 }
 
@@ -335,6 +359,7 @@ impl Source for OpusSource {
          * against samples from somewhere else entirely and arrive as a burst of noise.
          */
         self.pending.clear();
+        self.pending_pos = 0;
         self.exhausted = false;
         let _ = self.decoder.reset_state();
         Ok(())

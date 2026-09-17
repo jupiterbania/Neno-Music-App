@@ -85,6 +85,7 @@ const MORE_SUGGESTIONS_COUNT = RECENT_LARGE_COUNT;
 const suggestionCache = new Map<string, Track[]>();
 const suggestionLoads = new Map<string, Promise<Track[]>>();
 const EMPTY_TRACKS: Track[] = [];
+const NOOP = () => {};
 
 /**
  * Module-level persistent cache across screen switches.
@@ -484,9 +485,9 @@ export function HomePage({
     TOP_SUGGESTIONS_COUNT + MORE_SUGGESTIONS_COUNT,
   );
   const surpriseSuggestions = suggestions.slice(TOP_SUGGESTIONS_COUNT);
-  const playTrack = (track: Track, queue: readonly Track[]) => {
+  const playTrack = useCallback((track: Track, queue: readonly Track[]) => {
     void playerController.playTrackById(track.id, queue, true);
-  };
+  }, [playerController]);
 
   const playSurprise = () => {
     if (surpriseSuggestions.length === 0 || isSurpriseSpinning) return;
@@ -658,9 +659,9 @@ export function HomePage({
             <BrowseShelves
               shelves={[quickPicksShelf]}
               playerController={playerController}
-              onOpenAlbum={onOpenAlbum ?? (() => {})}
-              onOpenArtist={onOpenArtist ?? (() => {})}
-              onOpenPlaylist={onOpenPlaylist ?? (() => {})}
+              onOpenAlbum={onOpenAlbum ?? NOOP}
+              onOpenArtist={onOpenArtist ?? NOOP}
+              onOpenPlaylist={onOpenPlaylist ?? NOOP}
             />
           )}
         </div>
@@ -672,9 +673,9 @@ export function HomePage({
           <BrowseShelves
             shelves={remainingShelves}
             playerController={playerController}
-            onOpenAlbum={onOpenAlbum ?? (() => {})}
-            onOpenArtist={onOpenArtist ?? (() => {})}
-            onOpenPlaylist={onOpenPlaylist ?? (() => {})}
+            onOpenAlbum={onOpenAlbum ?? NOOP}
+            onOpenArtist={onOpenArtist ?? NOOP}
+            onOpenPlaylist={onOpenPlaylist ?? NOOP}
           />
         </div>
       )}

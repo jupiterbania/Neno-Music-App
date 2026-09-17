@@ -9,7 +9,8 @@ import { recordPlay } from "./playHistory";
 import { computeQueueWindow } from "./queueWindow";
 import { getOfflineTrack, isTrackDownloaded } from "./offlineStore";
 import { hasPreloadDeck } from "./preloadDeck";
-import { getAudioEngineMode } from "../ui/settings/audioEngine";
+import { getAudioEngineMode, usesRustAudioEngine } from "../ui/settings/audioEngine";
+import { setOutputDevice } from "./rustAudio";
 import { DiscordRpcService } from "./DiscordRPC";
 import {
   MAX_CROSSFADE_SEC,
@@ -215,6 +216,8 @@ export class PlayerController {
   private scrobbleTimerId: number | null = null;
   private playbackSettingsTimerId: ReturnType<typeof setTimeout> | null = null;
   private transitioning = false;
+  /** Tracks the last Discord RPC snapshot so we only send IPC when something actually changed. */
+  private discordLastEmittedKey: string | null = null;
 
   private state: PlayerState = {
     status: "idle",
@@ -944,6 +947,50 @@ export class PlayerController {
     if (this.warmedStream?.trackId === trackId) this.warmedStream = null;
   }
 
+  /**
+   * Recovers audio playback when the hardware audio output route changes
+   * (e.g. Bluetooth headphones connected or disconnected, wired headset plugged in/out).
+   */
+  async handleAudioOutputDeviceChanged(): Promise<void> {
+    if (!usesRustAudioEngine()) return;
+
+    logInternalInfo("PlayerController.handleAudioOutputDeviceChanged refreshing audio output route");
+    const track = this.state.currentTrack;
+    const wasPlaying = this.state.status === "playing";
+    const position = this.getCurrentTime() || 0;
+
+    try {
+      await setOutputDevice(null);
+    } catch (error) {
+      logInternalWarn("PlayerController.handleAudioOutputDeviceChanged setOutputDevice failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    if (!track || this.state.status === "idle") return;
+
+    this.loadedTrackId = null;
+    this.discardWarmedStream(track.id);
+
+    try {
+      if (wasPlaying) {
+        await this.playTrackById(track.id);
+        if (position > 0 && this.loadedTrackId === track.id) {
+          await this.seekTo(position);
+        }
+      } else {
+        await this.loadTrack(track);
+        if (position > 0) {
+          this.pendingSeekTime = position;
+        }
+      }
+    } catch (error) {
+      logInternalWarn("PlayerController.handleAudioOutputDeviceChanged track reload failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   private async handleTrackEnded(): Promise<void> {
     /*
      * `isTabActive` is intentionally NOT checked here.
@@ -1512,12 +1559,40 @@ export class PlayerController {
 
   /**
    * Pre-warms a specific track on user interaction (hover/touch) so playback starts instantly when clicked.
+   *
+   * The result is stored in `warmedStream` so that when the user actually clicks to play, the
+   * stream is claimed immediately and no second fetch is needed. Without storing it, the resolved
+   * data was discarded and `ensureTrackLoaded` started another round-trip from scratch.
+   *
+   * On the Rust engine, local and downloaded tracks are warmed too — they are decoded onto the
+   * standby deck, so skipping them left a gap exactly where the deck should have made it seamless.
+   * On the IFrame engine those tracks have no network wait to hide, so they stay excluded there.
    */
   warmTrack(track: Track): void {
     if (!this.dataSource.getStreamData) return;
-    if (track.source === "local" || isTrackDownloaded(track.id)) return;
+    // On the IFrame engine, local/downloaded tracks have no warming benefit.
+    // On the Rust engine they need the standby deck warmed for gapless, so allow them through.
+    if (
+      (track.source === "local" || isTrackDownloaded(track.id))
+      && !this.audioEngine.usesRustAudio()
+    ) return;
     if (this.warmedStream?.trackId === track.id) return;
-    void this.dataSource.getStreamData(track).catch(() => {});
+    if (this.warmingStream) return;
+
+    this.warmingStream = true;
+    void this.dataSource.getStreamData(track)
+      .then(async (data) => {
+        // Don't clobber a warmed slot for the next-in-queue track that arrived while we waited.
+        if (!this.warmedStream) {
+          this.warmedStream = { trackId: track.id, data };
+        }
+        // On Rust, also preload onto the standby deck so a click is truly gapless.
+        if (data.rustSource && this.audioEngine.usesRustAudio()) {
+          await this.audioEngine.preloadRustTrack(track.id, data.rustSource, track.durationSec ?? 0);
+        }
+      })
+      .catch(() => { /* best-effort */ })
+      .finally(() => { this.warmingStream = false; });
   }
 
   /**
@@ -1686,9 +1761,18 @@ export class PlayerController {
     for (const listener of this.listeners) {
       listener();
     }
-    
-    // Update Discord RPC presence
-    this.updateDiscordPresence();
+
+    // Update Discord RPC presence only when the track or play-state actually changed.
+    // emit() fires on every volume drag, seek tick, and state transition — calling the
+    // full IPC round-trip each time added measurable overhead on mobile.
+    const track = this.state.currentTrack;
+    const key = track
+      ? `${track.id}:${this.state.status}`
+      : `null:${this.state.status}`;
+    if (key !== this.discordLastEmittedKey) {
+      this.discordLastEmittedKey = key;
+      this.updateDiscordPresence();
+    }
   }
 
   private updateDiscordPresence() {

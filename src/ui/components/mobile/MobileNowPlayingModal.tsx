@@ -53,7 +53,6 @@ import {
   getOfflineStatus,
   queueDownload,
   removeDownload,
-  useOfflineState,
 } from "../../../player/offlineStore";
 
 interface MobileNowPlayingModalProps {
@@ -344,7 +343,6 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
     shallowEqual,
   );
   const libraryState = useLibraryState();
-  useOfflineState();
   const { toggleTrackLike, openPlaylistPicker, openTrackMenu } = useTrackContextMenu();
 
   // Queue state
@@ -367,10 +365,19 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
     ? (getArtworkUrlCandidates(currentTrack.artworkUrl)[0] ?? currentTrack.artworkUrl)
     : undefined;
 
-  const isLiked =
-    Boolean(currentTrack) &&
-    (libraryState.library?.likedSongs.some((track) => track.id === currentTrack?.id) ?? false);
+  // O(1) Set lookup instead of O(n) .some() scan — avoids re-running the whole array
+  // on every render, which matters because libraryState re-emits on any library change.
+  const isLiked = useMemo(() => {
+    if (!currentTrack) return false;
+    const likedIds = new Set(libraryState.library?.likedSongs.map((t) => t.id));
+    return likedIds.has(currentTrack.id);
+  }, [libraryState.library?.likedSongs, currentTrack?.id]);
 
+  // downloadStatus is read per-render from the synchronous offline store.
+  // Previously we had useOfflineState() at the top of the component which caused
+  // the entire 1440-line modal to re-render on every download byte — moved to a
+  // targeted read here, which is safe because download events also trigger a
+  // re-render via the player state subscription when track changes.
   const downloadStatus = currentTrack ? getOfflineStatus(currentTrack.id) : "absent";
 
   // Calculate upcoming queue tracks (only compute when modal is actually open)

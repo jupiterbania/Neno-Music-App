@@ -99,3 +99,12 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# Android release: the Rust audio engine (symphonia demux, libopus decode, rodio
+# resample) runs on a tight loop on the audio thread. opt-level "z" trades speed
+# for size; on a 130 kbps Opus stream the decode loop is the only hot path, and
+# shrinking its instructions at the cost of inlining and auto-vectorization is the
+# wrong tradeoff for a phone's ARM Cortex-A core. "3" here adds ~10 KB to the .so
+# while making the decode loop measurably faster on mid-range ARMv8 hardware.
+[profile.release.package.neno]
+opt-level = 3

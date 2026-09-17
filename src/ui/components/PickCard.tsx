@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, memo, type MouseEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { PlayActiveIcon } from "@/ui/icons";
 import { TrackArtwork } from "./TrackArtwork";
@@ -39,7 +39,7 @@ interface PickCardProps {
  *    free: the centre pick reads at full size and the outer ones recede into thumbnails.
  *    The hierarchy comes from the geometry rather than from styling each position.
  */
-export function PickCard({
+export function PickCardInner({
   artworkUrl,
   title,
   subtitle,
@@ -184,3 +184,10 @@ export function PickCard({
     </div>
   );
 }
+
+/**
+ * PickCard is rendered in long horizontal lists (Made For You carousel, mobile row).
+ * Wrapping in memo prevents full carousel re-renders when parent state changes like
+ * `isRefreshing` or `isSurpriseSpinning` that don't affect individual card props.
+ */
+export const PickCard = memo(PickCardInner);

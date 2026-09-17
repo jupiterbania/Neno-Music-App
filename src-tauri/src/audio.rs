@@ -82,15 +82,6 @@ impl BufferReader {
     pub(crate) fn new(buffer: Arc<Mutex<MediaBuffer>>) -> Self {
         Self { buffer, position: 0 }
     }
-
-    /// `(contiguous_len, total, failed)` — read under one lock so the three cannot disagree.
-    fn state(&self) -> io::Result<(usize, usize, bool)> {
-        let guard = self
-            .buffer
-            .lock()
-            .map_err(|_| io::Error::other("audio buffer lock poisoned"))?;
-        Ok((guard.contiguous_len(), guard.total, guard.failed))
-    }
 }
 
 impl Read for BufferReader {
@@ -101,20 +92,35 @@ impl Read for BufferReader {
 
         let deadline = Instant::now() + READ_TIMEOUT;
         loop {
-            let (available, total, failed) = self.state()?;
+            // Single lock per iteration: read all fields and copy bytes together.
+            // Previously this called self.state() (one lock) then locked again to
+            // copy bytes — two Mutex acquisitions per read on the hot decode path.
+            let result = {
+                let guard = self
+                    .buffer
+                    .lock()
+                    .map_err(|_| io::Error::other("audio buffer lock poisoned"))?;
+                let available = guard.contiguous_len();
+                let total = guard.total;
+                let failed = guard.failed;
 
-            if self.position >= total {
-                return Ok(0);
-            }
-            if available > self.position {
-                let end = (self.position + out.len()).min(available).min(total) - 1;
-                let bytes = {
-                    let guard = self
-                        .buffer
-                        .lock()
-                        .map_err(|_| io::Error::other("audio buffer lock poisoned"))?;
-                    guard.read(self.position, end)
-                };
+                if self.position >= total {
+                    return Ok(0);
+                }
+                if available > self.position {
+                    let end = (self.position + out.len()).min(available).min(total) - 1;
+                    let bytes = guard.read(self.position, end);
+                    Some((bytes, failed))
+                } else {
+                    // Not enough bytes yet; check failed/timeout outside the lock.
+                    if failed {
+                        return Ok(0);
+                    }
+                    None
+                }
+            };
+
+            if let Some((bytes, _)) = result {
                 if bytes.is_empty() {
                     return Ok(0);
                 }
@@ -122,14 +128,12 @@ impl Read for BufferReader {
                 self.position += bytes.len();
                 return Ok(bytes.len());
             }
+
             /*
              * A failed download reports EOF rather than an error. The decoder then finishes the
              * frames it already has and the track ends early, which is a truncated song instead
              * of a dead sink that never reports `ended` and hangs the queue.
              */
-            if failed {
-                return Ok(0);
-            }
             if Instant::now() >= deadline {
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
@@ -154,13 +158,20 @@ impl MediaSource for BufferReader {
     }
 
     fn byte_len(&self) -> Option<u64> {
-        self.state().ok().map(|(_, total, _)| total as u64)
+        self.buffer
+            .lock()
+            .ok()
+            .map(|guard| guard.total as u64)
     }
 }
 
 impl Seek for BufferReader {
     fn seek(&mut self, from: SeekFrom) -> io::Result<u64> {
-        let (_, total, _) = self.state()?;
+        let total = self
+            .buffer
+            .lock()
+            .map_err(|_| io::Error::other("audio buffer lock poisoned"))
+            .map(|guard| guard.total)?;
         let target = match from {
             SeekFrom::Start(offset) => offset as i64,
             SeekFrom::Current(delta) => self.position as i64 + delta,

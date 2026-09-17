@@ -250,6 +250,12 @@ export function useAndroidMediaBridge(): void {
             console.warn("[androidMediaBridge] skipToPrevious failed:", err);
           });
           break;
+        case "audioDeviceChanged":
+        case "outputDeviceChanged":
+          void playerController.handleAudioOutputDeviceChanged().catch((err) => {
+            console.warn("[androidMediaBridge] handleAudioOutputDeviceChanged failed:", err);
+          });
+          break;
         default:
           break;
       }

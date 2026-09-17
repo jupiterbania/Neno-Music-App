@@ -89,11 +89,14 @@ type PlayerControllerMethod =
   | "addTracksToQueue"
   | "setStopAfterQueueIndex"
   | "generateQueueAfter"
-  | "warmTrack";
+  | "warmTrack"
+  | "handleAudioOutputDeviceChanged";
 
 export type PlayerControllerActions = Pick<PlayerController, PlayerControllerMethod>;
 
 class ActivePlayerController implements PlayerControllerActions {
+  handleAudioOutputDeviceChanged = () =>
+    tabManager.getActivePlayer().handleAudioOutputDeviceChanged();
   loadTrack = async (track: Parameters<PlayerController["loadTrack"]>[0]) =>
     (await tabManager.claimFocusedPlayer()).loadTrack(track);
   playTrackById = async (

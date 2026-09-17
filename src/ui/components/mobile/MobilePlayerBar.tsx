@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo } from "react";
+import { useEffect, useRef, useState, memo, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import {
@@ -53,7 +53,7 @@ const MiniPlayerProgress = memo(function MiniPlayerProgress({ trackId }: { track
   );
 });
 
-export function MobilePlayerBar({ onOpenNowPlaying, className }: MobilePlayerBarProps) {
+export function MobilePlayerBarInner({ onOpenNowPlaying, className }: MobilePlayerBarProps) {
   const state = usePlayerSelector(
     (player) => ({
       currentTrack: player.currentTrack,
@@ -72,8 +72,11 @@ export function MobilePlayerBar({ onOpenNowPlaying, className }: MobilePlayerBar
 
   if (!currentTrack) return null;
 
-  const isLiked =
-    libraryState.library?.likedSongs.some((track) => track.id === currentTrack.id) ?? false;
+  // O(1) lookup using a Set instead of O(n) .some() scan on every render
+  const isLiked = useMemo(() => {
+    const likedIds = new Set(libraryState.library?.likedSongs.map((t) => t.id));
+    return likedIds.has(currentTrack.id);
+  }, [libraryState.library?.likedSongs, currentTrack.id]);
 
   const handlePlayPause = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -231,3 +234,5 @@ export function MobilePlayerBar({ onOpenNowPlaying, className }: MobilePlayerBar
     </AnimatePresence>
   );
 }
+
+export const MobilePlayerBar = memo(MobilePlayerBarInner);

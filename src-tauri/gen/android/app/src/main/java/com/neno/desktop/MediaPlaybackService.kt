@@ -178,7 +178,84 @@ class MediaPlaybackService : Service() {
         acquireWakeLock()
         initMediaSession()
         setupTelephonyListener()
+        registerAudioRouteMonitoring()
         updateNotification()
+    }
+
+    // ── Becoming Noisy & Audio Route Changes (Bluetooth / Headphones) ──
+    private var audioDeviceCallback: android.media.AudioDeviceCallback? = null
+    private var audioRouteReceiver: BroadcastReceiver? = null
+    private var lastServiceRouteEventTime: Long = 0L
+
+    private fun notifyAudioDeviceChanged() {
+        val now = System.currentTimeMillis()
+        if (now - lastServiceRouteEventTime < 400) return
+        lastServiceRouteEventTime = now
+
+        MainActivity.instance?.dispatchMediaControl("audioDeviceChanged")
+        sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "audioDeviceChanged"))
+    }
+
+    private fun registerAudioRouteMonitoring() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val am = audioManager ?: (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+            if (am != null) {
+                audioDeviceCallback = object : android.media.AudioDeviceCallback() {
+                    override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                        notifyAudioDeviceChanged()
+                    }
+
+                    override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                        notifyAudioDeviceChanged()
+                    }
+                }
+                am.registerAudioDeviceCallback(audioDeviceCallback, android.os.Handler(android.os.Looper.getMainLooper()))
+            }
+        }
+
+        audioRouteReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                when (intent?.action) {
+                    android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED,
+                    android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED,
+                    android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED,
+                    AudioManager.ACTION_HEADSET_PLUG -> {
+                        notifyAudioDeviceChanged()
+                    }
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
+            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
+            addAction(AudioManager.ACTION_HEADSET_PLUG)
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(audioRouteReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(audioRouteReceiver, filter)
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun unregisterAudioRouteMonitoring() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val am = audioManager ?: (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+            audioDeviceCallback?.let {
+                try {
+                    am?.unregisterAudioDeviceCallback(it)
+                } catch (_: Exception) {}
+                audioDeviceCallback = null
+            }
+        }
+        audioRouteReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (_: Exception) {}
+            audioRouteReceiver = null
+        }
     }
 
     // ── Becoming Noisy (Headphones / Bluetooth unplugged) ───────────────
@@ -611,6 +688,7 @@ class MediaPlaybackService : Service() {
     override fun onDestroy() {
         abandonAudioFocus()
         unregisterNoisyReceiver()
+        unregisterAudioRouteMonitoring()
         releaseWakeLock()
         try {
             mediaSession?.isActive = false

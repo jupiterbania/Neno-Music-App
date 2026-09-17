@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { motion } from "motion/react";
 import { RefreshIcon, SearchIcon } from "@/ui/icons";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,7 @@ interface MobileHeaderProps {
   isRefreshing?: boolean;
 }
 
-export function MobileHeader({
+function MobileHeaderInner({
   onOpenSearch,
   onSignIn,
   onOpenSettings,
@@ -120,3 +120,10 @@ export function MobileHeader({
     </header>
   );
 }
+
+/**
+ * Memoized: sits at the top of every mobile page and had no guard against re-rendering
+ * on every parent state change (recommendations loading, library updates, etc.).
+ * Account / isSignedIn are the only values that actually change its output.
+ */
+export const MobileHeader = memo(MobileHeaderInner);

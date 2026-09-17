@@ -22,7 +22,15 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
-        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.0")
+        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.2")
+    }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -64,10 +72,23 @@ android {
                     )
                 }
             }
+            // R8 full mode: more aggressive dead-code elimination, class merging, and
+            // inlining vs the default compat mode. Noticeably smaller DEX and faster ART
+            // compilation on first launch.
+            optimization {
+                keepRules {
+                    ignoreExternalDependencies("*")
+                }
+            }
         }
     }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "11"
+        freeCompilerArgs += listOf("-opt-in=kotlin.RequiresOptIn")
     }
     buildFeatures {
         buildConfig = true

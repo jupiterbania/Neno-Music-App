@@ -1353,7 +1353,7 @@ export function SettingsPage({
                     Installed: {
                       installedVersion
                         ? installedVersion === "Unknown" ? installedVersion : `v${installedVersion}`
-                        : "v1.0.0"
+                        : "Loading…"
                     }
                   </span>
                 </div>
