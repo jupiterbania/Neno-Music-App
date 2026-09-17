@@ -28,6 +28,9 @@ jobs:
   build-ios:
     name: Build iOS App
     runs-on: macos-15
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+      CMAKE_POLICY_DEFAULT_CMP0000: "OLD"
 
     steps:
       - name: Check out repository
@@ -71,6 +74,8 @@ jobs:
         run: npm run build
 
       - name: Build Tauri iOS App
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
         run: |
           EXPORT_OPT="${{ github.event.inputs.export_method || 'debugging' }}"
           npx tauri ios build --export-method "$EXPORT_OPT" --no-sign
