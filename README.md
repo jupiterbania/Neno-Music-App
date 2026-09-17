@@ -32,34 +32,36 @@ Whether you're listening on your desktop while gaming or coding, or streaming on
 ## 📸 Screenshots
 
 <div align="center">
-  <p><b>🏠 Home Dashboard & Recommendations</b></p>
-  <img src="assets/Screenshoots/Home%20screen.jpg" alt="Home Dashboard" width="100%" />
-  
-  <br /><br />
-
   <table>
     <tr>
       <td align="center" width="50%">
-        <img src="assets/Screenshoots/Music%20Player.jpg" alt="Music Player & Lyrics" width="100%" />
+        <img src="assets/Screenshoots/Home%20screen.jpg" alt="Home Dashboard" width="360" />
         <br />
-        <b>🎵 Now Playing & Real-time Synced Lyrics</b>
+        <sub><b>🏠 Home Dashboard</b></sub>
       </td>
       <td align="center" width="50%">
-        <img src="assets/Screenshoots/ArtistAlbum%20Screen.jpg" alt="Artist & Album View" width="100%" />
+        <img src="assets/Screenshoots/Music%20Player.jpg" alt="Now Playing & Lyrics" width="360" />
         <br />
-        <b>💿 Artist Discography & Album Details</b>
+        <sub><b>🎵 Now Playing & Synced Lyrics</b></sub>
       </td>
     </tr>
     <tr>
       <td align="center" width="50%">
-        <img src="assets/Screenshoots/Search%20Screen.jpg" alt="Search & Discovery" width="100%" />
+        <img src="assets/Screenshoots/ArtistAlbum%20Screen.jpg" alt="Artist & Album View" width="360" />
         <br />
-        <b>🔍 Instant Search & Curated Moods</b>
+        <sub><b>💿 Artist & Album Details</b></sub>
       </td>
       <td align="center" width="50%">
-        <img src="assets/Screenshoots/Satting%20Login%20Screen.jpg" alt="Settings & Account" width="100%" />
+        <img src="assets/Screenshoots/Search%20Screen.jpg" alt="Search & Discovery" width="360" />
         <br />
-        <b>⚙️ Settings & Google Account Sync</b>
+        <sub><b>🔍 Search & Curated Moods</b></sub>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" colspan="2">
+        <img src="assets/Screenshoots/Satting%20Login%20Screen.jpg" alt="Settings & Account" width="360" />
+        <br />
+        <sub><b>⚙️ Settings & Account Sync</b></sub>
       </td>
     </tr>
   </table>
