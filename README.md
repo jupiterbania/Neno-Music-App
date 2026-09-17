@@ -29,6 +29,39 @@ Whether you're listening on your desktop while gaming or coding, or streaming on
 
 ---
 
+## 📸 Screenshots
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="50%">
+        <img src="assets/Screenshoots/Music%20Player.jpg" alt="Music Player & Lyrics" width="100%" />
+        <br />
+        <b>🎵 Now Playing & Real-time Lyrics</b>
+      </td>
+      <td align="center" width="50%">
+        <img src="assets/Screenshoots/ArtistAlbum%20Screen.jpg" alt="Artist & Album View" width="100%" />
+        <br />
+        <b>💿 Artist Discography & Album View</b>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" width="50%">
+        <img src="assets/Screenshoots/Search%20Screen.jpg" alt="Search & Discovery" width="100%" />
+        <br />
+        <b>🔍 Instant Search & Moods</b>
+      </td>
+      <td align="center" width="50%">
+        <img src="assets/Screenshoots/Satting%20Login%20Screen.jpg" alt="Settings & Account" width="100%" />
+        <br />
+        <b>⚙️ Settings & Account Management</b>
+      </td>
+    </tr>
+  </table>
+</div>
+
+---
+
 ## ✨ Features
 
 ### 🚀 Instant Performance & Clean Experience
