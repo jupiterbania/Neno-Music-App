@@ -1835,7 +1835,7 @@ fn save_youtube_music_cookie(app: &tauri::AppHandle, cookie: &str) -> Result<(),
     })
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn save_youtube_music_cookie(app: &tauri::AppHandle, cookie: &str) -> Result<(), CommandError> {
     let path = youtube_cookie_file(app)?;
     if let Some(parent) = path.parent() {
@@ -1848,7 +1848,7 @@ fn save_youtube_music_cookie(app: &tauri::AppHandle, cookie: &str) -> Result<(),
     })
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "android")))]
+#[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
 fn save_youtube_music_cookie(app: &tauri::AppHandle, cookie: &str) -> Result<(), CommandError> {
     match save_youtube_music_cookie_entries(cookie) {
         Ok(()) => {
@@ -1876,7 +1876,7 @@ fn save_youtube_music_cookie(app: &tauri::AppHandle, cookie: &str) -> Result<(),
 }
 
 fn delete_youtube_music_cookie_entries() -> Result<(), CommandError> {
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         return Ok(());
     }
@@ -2040,7 +2040,7 @@ fn read_stored_youtube_music_cookie(app: &tauri::AppHandle) -> Result<Option<Str
         return Ok(None);
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let path = youtube_cookie_file(app)?;
         if !path.exists() {
@@ -2056,13 +2056,13 @@ fn read_stored_youtube_music_cookie(app: &tauri::AppHandle) -> Result<Option<Str
                 }
             }
             Err(error) => {
-                eprintln!("[internal][tauri][warn] android session read failed: {error}");
+                eprintln!("[internal][tauri][warn] mobile session read failed: {error}");
                 Ok(None)
             }
         }
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "android")))]
+    #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
     {
         match load_youtube_music_cookie_entries() {
             Ok(Some(cookie)) => Ok(Some(cookie)),
@@ -2558,10 +2558,10 @@ async fn sign_in_youtube_music(
     account_lock: tauri::State<'_, AccountStoreLock>,
 ) -> Result<SignInResult, CommandError> {
     eprintln!("[internal][tauri][info] sign_in_youtube_music start");
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         return Err(CommandError {
-            message: "Android uses native Google Sign-in flow.".to_string(),
+            message: "Mobile platforms use native Google Sign-in flow.".to_string(),
         });
     }
     /*
@@ -2665,9 +2665,9 @@ async fn refresh_youtube_music_cookie(
     account_lock: tauri::State<'_, AccountStoreLock>,
 ) -> Result<Option<String>, CommandError> {
     eprintln!("[internal][tauri][info] refresh_youtube_music_cookie start");
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        eprintln!("[internal][tauri][info] refresh_youtube_music_cookie on Android: keeping active cookie");
+        eprintln!("[internal][tauri][info] refresh_youtube_music_cookie on mobile: keeping active cookie");
         let active_cookie = load_account_store(&app)?.active().map(|account| account.cookie.clone());
         if let Some(cookie) = active_cookie {
             if let Ok(mut state) = jar.0.lock() {

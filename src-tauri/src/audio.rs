@@ -379,7 +379,7 @@ pub(crate) struct AudioOutputDevice {
  * has ever started.
  */
 pub(crate) fn list_output_devices() -> Result<Vec<AudioOutputDevice>, String> {
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         return Ok(Vec::new());
     }
@@ -563,7 +563,7 @@ fn our_sink_input_id() -> Option<u64> {
  * settings, which is a worse failure than picking a device for them.
  */
 fn open_device_sink(id: Option<&str>) -> Result<MixerDeviceSink, String> {
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _ = id;
         return match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -604,7 +604,7 @@ fn open_device_sink(id: Option<&str>) -> Result<MixerDeviceSink, String> {
 }
 
 fn find_output_device(id: &str) -> Option<rodio::Device> {
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _ = id;
         return None;
