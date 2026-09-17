@@ -1,6 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-#[cfg(all(not(debug_assertions), not(target_os = "android")))]
+#[cfg(all(not(debug_assertions), not(any(target_os = "android", target_os = "ios"))))]
 use portpicker::pick_unused_port;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -22,9 +22,9 @@ macro_rules! eprintln {
     }};
 }
 
-#[cfg(all(not(debug_assertions), not(target_os = "android")))]
+#[cfg(all(not(debug_assertions), not(any(target_os = "android", target_os = "ios"))))]
 use tauri::utils::config::FrontendDist;
-#[cfg(all(not(debug_assertions), not(target_os = "android")))]
+#[cfg(all(not(debug_assertions), not(any(target_os = "android", target_os = "ios"))))]
 use tauri::utils::config_v1::WindowUrl;
 
 
@@ -48,7 +48,7 @@ mod linux_media;
 
 mod audio;
 mod process_memory;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod discord_rpc;
 mod equalizer;
 mod opus_source;
@@ -648,7 +648,7 @@ fn local_audio_title(path: &Path) -> String {
  * A tag read per file makes the scan slower than a `read_dir`; that is the cost of the metadata
  * being right, and it is paid once per page load rather than per play.
  */
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn local_audio_entry(path: &Path) -> LocalAudioFile {
     use lofty::file::{AudioFile, TaggedFileExt};
     use lofty::tag::Accessor;
@@ -731,7 +731,7 @@ fn read_image_file(path: String) -> Result<LocalArtwork, CommandError> {
 }
 
 /// The first embedded picture, for the one file the UI is about to show.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn local_audio_artwork(path: String) -> Result<Option<LocalArtwork>, CommandError> {
     use base64::Engine;
@@ -760,7 +760,7 @@ fn local_audio_artwork(path: String) -> Result<Option<LocalArtwork>, CommandErro
     }))
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn scan_local_audio_path(path: &Path, files: &mut Vec<LocalAudioFile>) -> Result<(), CommandError> {
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
@@ -789,7 +789,7 @@ fn scan_local_audio_path(path: &Path, files: &mut Vec<LocalAudioFile>) -> Result
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn local_audio_scan(paths: Vec<String>) -> Result<Vec<LocalAudioFile>, CommandError> {
     let mut files = Vec::new();
@@ -875,7 +875,7 @@ fn write_text_file(path: String, contents: String) -> Result<(), CommandError> {
     fs::write(&path, contents).map_err(|error| cache_error(format!("file write failed: {error}")))
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn local_audio_read_tags(path: String) -> Result<LocalAudioTags, CommandError> {
     use lofty::file::TaggedFileExt;
@@ -909,7 +909,7 @@ fn local_audio_read_tags(path: String) -> Result<LocalAudioTags, CommandError> {
     })
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn local_audio_write_tags(path: String, tags: LocalAudioTags) -> Result<(), CommandError> {
     use lofty::config::WriteOptions;
@@ -1015,7 +1015,7 @@ fn local_audio_write_tags(path: String, tags: LocalAudioTags) -> Result<(), Comm
 }
 
 /// Holds the active folder watcher. Replaced wholesale whenever the watched set changes.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 struct LocalAudioWatcher(Mutex<Option<notify::RecommendedWatcher>>);
 
 /// Watches folders for changes and tells the frontend to rescan.
@@ -1023,7 +1023,7 @@ struct LocalAudioWatcher(Mutex<Option<notify::RecommendedWatcher>>);
 /// Deliberately coarse: it emits one debounced "something changed" event rather than a diff.
 /// The scan is cheap, and a precise change feed would have to model renames, temp files and
 /// editors that write-then-replace — all of which produce the same user-visible outcome.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn local_audio_watch(
     app: tauri::AppHandle,
@@ -1086,7 +1086,7 @@ fn local_audio_watch(
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn local_audio_unwatch(state: tauri::State<'_, LocalAudioWatcher>) -> Result<(), CommandError> {
     let mut guard = state
@@ -1608,10 +1608,10 @@ fn greet(name: &str) -> String {
 
 /// Key written by the frontend's durable settings layer. Read here rather than pushed from
 /// JS so the close handler answers correctly even before the webview has finished booting.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 const MINIMIZE_TO_TRAY_SETTING: &str = "minimize-to-tray";
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn minimize_to_tray_enabled(app: &tauri::AppHandle) -> bool {
     read_app_settings(app)
         .ok()
@@ -1633,7 +1633,7 @@ fn show_main_window(app: &tauri::AppHandle) {
 /// Both the titlebar close button and the OS close request come through here so they cannot
 /// disagree — a window that vanishes from one and quits from the other is the classic
 /// minimize-to-tray bug.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn close_or_hide_main_window(app: &tauri::AppHandle) {
     if minimize_to_tray_enabled(app) {
         if let Some(window) = app.get_webview_window("main") {
@@ -1645,7 +1645,7 @@ fn close_or_hide_main_window(app: &tauri::AppHandle) {
     app.exit(0);
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{TrayIconBuilder, TrayIconEvent};
@@ -1681,7 +1681,7 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
     eprintln!("[internal][tauri][info] quit_app invoked");
@@ -1880,7 +1880,7 @@ fn delete_youtube_music_cookie_entries() -> Result<(), CommandError> {
     {
         return Ok(());
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         if let Ok(entry) = youtube_cookie_keyring_entry() {
             let _ = entry.delete_credential();
@@ -2678,7 +2678,7 @@ async fn refresh_youtube_music_cookie(
         return Ok(None);
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         let active_slot_id = {
             let _guard = account_lock.0.lock().map_err(|_| CommandError {
@@ -5304,7 +5304,7 @@ async fn proxy_http_request(
     })
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn discord_rpc_update(
     discord_manager: tauri::State<
@@ -5349,7 +5349,7 @@ fn discord_rpc_update(
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn discord_rpc_clear(
     discord_manager: tauri::State<
@@ -5447,7 +5447,7 @@ pub extern "C" fn Java_com_zuno_desktop_MainActivity_initAndroidContext(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let discord_manager =
         std::sync::Arc::new(std::sync::Mutex::new(discord_rpc::DiscordRpcManager::new()));
 
@@ -5458,17 +5458,17 @@ pub fn run() {
 
 
     // Single-instance enforcement: desktop-only. Android OS manages single-instance itself.
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
         show_main_window(app);
     }));
 
     // Discord RPC: desktop-only — Discord has no IPC on Android.
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let builder = builder.manage(discord_manager);
 
     // Autostart: desktop-only — Android has its own launch lifecycle.
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let builder = builder.plugin(tauri_plugin_autostart::Builder::new().build());
 
     #[allow(unused_mut)]
@@ -5483,7 +5483,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init());
 
 
-    #[cfg(all(not(debug_assertions), not(target_os = "android")))]
+    #[cfg(all(not(debug_assertions), not(any(target_os = "android", target_os = "ios"))))]
     {
         let port = pick_unused_port().expect("failed to find an unused localhost port");
         let url: url::Url = format!("http://localhost:{}", port)
@@ -5502,7 +5502,7 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     let builder = builder.manage(linux_media::LinuxMediaSession::new());
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let builder = builder.manage(LocalAudioWatcher(Mutex::new(None)));
 
     builder
@@ -5520,7 +5520,7 @@ pub fn run() {
                 std::eprintln!("[internal][tauri][warn] {}", error.message);
             }
             // Tray icon is a desktop-only concept; Android has no system tray.
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Err(error) = build_tray(app.handle()) {
                 std::eprintln!("[internal][tauri][warn] tray unavailable: {error}");
             }
@@ -5548,7 +5548,7 @@ pub fn run() {
                     "[internal][tauri][info] window close requested label={}",
                     window.label()
                 );
-                #[cfg(not(target_os = "android"))]
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 if window.label() == "main" {
                     api.prevent_close();
                     close_or_hide_main_window(window.app_handle());
@@ -5602,7 +5602,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             desktop_environment,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             quit_app,
             frontend_log,
 
@@ -5651,26 +5651,26 @@ pub fn run() {
             cache_stats,
             cache_set_max_bytes,
             cache_clear,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_audio_scan,
             local_audio_read,
             read_text_file,
             write_text_file,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_audio_read_tags,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_audio_artwork,
             read_image_file,
             process_memory::app_memory_report,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_audio_write_tags,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_audio_watch,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_audio_unwatch,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             discord_rpc_update,
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             discord_rpc_clear,
             #[cfg(target_os = "macos")]
             macos_media::update_macos_media_session,

@@ -76,12 +76,12 @@ souvlaki = "0.7"
 ndk-context = "0.1"
 jni = "0.21"
 
-# Desktop-only dependencies (Windows, macOS, Linux) — excluded from Android builds.
+# Desktop-only dependencies (Windows, macOS, Linux) — excluded from Android and iOS mobile builds.
 # Discord IPC, system tray, single-instance guard, autostart, localhost server,
 # file-system watching, local audio tag reading, and the OS keyring are all
-# desktop-only features that either don't exist on Android or are managed
-# by the Android OS itself.
-[target.'cfg(not(target_os = "android"))'.dependencies]
+# desktop-only features that either don't exist on mobile or are managed
+# by the mobile OS itself.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 discord-rich-presence = "0.2"
 tauri-plugin-autostart = "2"
 tauri-plugin-localhost = "2"
