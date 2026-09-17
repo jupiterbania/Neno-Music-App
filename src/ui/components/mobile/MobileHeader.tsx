@@ -112,7 +112,8 @@ export function MobileHeader({
             onClick={() => void handleSignIn()}
             isBusy={isSigningIn}
             size="sm"
-            className="h-8 px-3 py-0 text-xs font-semibold gap-1.5 shadow-xs"
+            label="Sign In"
+            className="h-8 px-3 text-xs font-semibold gap-1.5 shadow-xs"
           />
         )}
       </div>

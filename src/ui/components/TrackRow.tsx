@@ -452,13 +452,12 @@ export const TrackRow = memo(function TrackRow({
           isSelected={isSelected}
           onToggle={handleToggleSelected}
         />
-      ) : (
-      /* The position number is only useful until you have decided to act on the row, so it
-          gives way to a play glyph on hover — and to a level meter once this row is the one
-          playing. All three share the slot, so the row never reflows between states. */
-      <span className="relative w-6 shrink-0 text-center text-xs tabular-nums text-muted-foreground">
-        {/* Number — hidden via hideIndex but the slot still exists for the play indicator */}
-        {!hideIndex && (
+      ) : !hideIndex ? (
+        /* The position number is only useful until you have decided to act on the row, so it
+            gives way to a play glyph on hover — and to a level meter once this row is the one
+            playing. All three share the slot, so the row never reflows between states. */
+        <span className="relative w-6 shrink-0 text-center text-xs tabular-nums text-muted-foreground">
+          {/* Number */}
           <span
             className={cn(
               "transition-opacity",
@@ -467,54 +466,65 @@ export const TrackRow = memo(function TrackRow({
           >
             {index + 1}
           </span>
-        )}
 
-        {/*
-          On a list that supports multi-select, hover offers the checkbox instead of the play
-          glyph. Selection was previously unreachable without already having a selection: the
-          box only appeared once `isSelectionActive`, and the only way in was a ctrl-click
-          nothing advertised. The row itself still plays on click, so nothing is lost.
-        */}
-        {!isCurrent && canSelect && (
-          <span className="absolute inset-0 grid place-items-center opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
-            <SelectionCheckbox
-              title={track.title}
-              isSelected={isSelected}
-              onToggle={handleToggleSelected}
-            />
-          </span>
-        )}
-
-        {!isCurrent && !canSelect && (
-          <PlayActiveIcon
-            size={14}
-            className="absolute inset-0 m-auto opacity-0 transition-opacity group-hover/row:opacity-100"
-            aria-hidden="true"
-          />
-        )}
-
-        {isCurrent && (
-          <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
-            {isPlaying ? (
-              <MusicVisualizer
-                bars={4}
-                className="[--music-gap:2px] [--music-height:13px] [--music-width:17px]"
+          {/*
+            On a list that supports multi-select, hover offers the checkbox instead of the play
+            glyph.
+          */}
+          {!isCurrent && canSelect && (
+            <span className="absolute inset-0 grid place-items-center opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
+              <SelectionCheckbox
+                title={track.title}
+                isSelected={isSelected}
+                onToggle={handleToggleSelected}
               />
-            ) : (
-              <PlayActiveIcon size={14} className="text-primary" />
-            )}
-          </span>
-        )}
-      </span>
-      )}
+            </span>
+          )}
+
+          {!isCurrent && !canSelect && (
+            <PlayActiveIcon
+              size={14}
+              className="absolute inset-0 m-auto opacity-0 transition-opacity group-hover/row:opacity-100"
+              aria-hidden="true"
+            />
+          )}
+
+          {isCurrent && (
+            <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+              {isPlaying ? (
+                <MusicVisualizer
+                  bars={4}
+                  className="[--music-gap:2px] [--music-height:13px] [--music-width:17px]"
+                />
+              ) : (
+                <PlayActiveIcon size={14} className="text-primary" />
+              )}
+            </span>
+          )}
+        </span>
+      ) : null}
 
       {showArtwork ? (
-        <TrackArtwork
-          className="size-10 shrink-0 "
-          size={40}
-          artworkUrl={track.artworkUrl}
-          iconSize={18}
-        />
+        <div className="relative size-10 shrink-0 overflow-hidden rounded-lg">
+          <TrackArtwork
+            className="size-full object-cover"
+            size={40}
+            artworkUrl={track.artworkUrl}
+            iconSize={18}
+          />
+          {hideIndex && isCurrent && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-[0.5px]">
+              {isPlaying ? (
+                <MusicVisualizer
+                  bars={3}
+                  className="[--music-gap:2px] [--music-height:12px] [--music-width:14px]"
+                />
+              ) : (
+                <PlayActiveIcon size={16} className="text-white fill-white" />
+              )}
+            </div>
+          )}
+        </div>
       ) : null}
 
       <span className="flex min-w-0 flex-1 flex-col">

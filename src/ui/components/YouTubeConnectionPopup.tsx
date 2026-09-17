@@ -37,18 +37,19 @@ export function YouTubeConnectionPopup({ onOpenSettings, className }: YouTubeCon
   const isLoading = libraryState.status === "loading";
   const isAuthorizing = libraryState.status === "authorizing";
   const isError = libraryState.status === "error";
-  const isReady = libraryState.status === "ready" || Boolean(libraryState.library);
+  const isReady = libraryState.status === "ready";
   const isGuest = libraryState.status === "signed-out";
 
+  // Connecting is active when restoring session, authorizing, or initially loading without cache
   const isConnecting = isRestoring || isAuthorizing || (isLoading && !libraryState.library);
-  const isConnected = isReady || isGuest;
+  const isConnected = !isConnecting && (isReady || isGuest || Boolean(libraryState.library));
 
-  // Auto-dismiss smoothly after 100% connected (unless expanded by user)
+  // Auto-dismiss smoothly 3.5s ONLY AFTER 100% connected (unless expanded by user)
   useEffect(() => {
     if (!isConnected || isExpanded) return;
     const timer = window.setTimeout(() => {
       setIsVisible(false);
-    }, 2000);
+    }, 3500);
     return () => window.clearTimeout(timer);
   }, [isConnected, isExpanded]);
 
@@ -149,7 +150,7 @@ export function YouTubeConnectionPopup({ onOpenSettings, className }: YouTubeCon
               <motion.div
                 initial={{ width: "15%" }}
                 animate={{
-                  width: isConnecting ? "60%" : isConnected ? "100%" : "30%",
+                  width: isConnecting ? "70%" : isConnected ? "100%" : "30%",
                 }}
                 transition={{ duration: 0.6, ease: "easeOut" }}
                 className={cn(

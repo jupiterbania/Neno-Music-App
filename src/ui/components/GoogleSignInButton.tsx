@@ -9,6 +9,8 @@ interface GoogleSignInButtonProps {
   disabled?: boolean;
   /** Stretches to the container — for the title-bar panel and the sidebar's empty state. */
   fullWidth?: boolean;
+  /** Custom label to override default "Sign in with Google" (e.g. "Sign In" on mobile). */
+  label?: string;
   /**
    * Drops the label for the collapsed sidebar rail, which is 72px wide.
    *
@@ -39,11 +41,13 @@ export function GoogleSignInButton({
   isBusy = false,
   disabled = false,
   fullWidth = false,
+  label,
   iconOnly = false,
   size = "md",
   className,
 }: GoogleSignInButtonProps) {
   const glyphSize = size === "sm" ? 15 : 17;
+  const displayLabel = label ?? "Sign in with Google";
 
   return (
     <button
@@ -51,8 +55,8 @@ export function GoogleSignInButton({
       onClick={onClick}
       disabled={disabled || isBusy}
       aria-busy={isBusy}
-      aria-label="Sign in with Google"
-      title="Sign in with Google"
+      aria-label={displayLabel}
+      title={displayLabel}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full font-medium",
         "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -66,13 +70,13 @@ export function GoogleSignInButton({
         iconOnly
           // Square so it stays a circle, and sized to match the rail's other icon buttons.
           ? (size === "sm" ? "size-9" : "size-10")
-          : cn("gap-2.5", size === "sm" ? "px-3.5 py-1.5 text-sm" : "px-5 py-2.5 text-sm"),
+          : cn("gap-2", size === "sm" ? "px-3 py-1.5 text-xs font-semibold" : "px-5 py-2.5 text-sm"),
         fullWidth && !iconOnly && "w-full",
         className,
       )}
     >
       {isBusy ? <SpinnerSteps size={glyphSize} /> : <GoogleIcon size={glyphSize} />}
-      {!iconOnly && (isBusy ? "Connecting…" : "Sign in with Google")}
+      {!iconOnly && (isBusy ? "Connecting…" : displayLabel)}
     </button>
   );
 }

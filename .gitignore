@@ -38,6 +38,8 @@ dist-ssr
 
 outputs/*
 .codex/*
+release-ios/
+artifacts/
 
 # Crash droppings from the Git-for-Windows shell.
 *.stackdump

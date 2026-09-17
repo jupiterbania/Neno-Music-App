@@ -158,33 +158,42 @@ export function MediaHeader({
   }, [artworkUrl]);
 
   return (
-    <header className="relative flex flex-col sm:flex-row items-start sm:items-end gap-4 sm:gap-6 px-1 pb-4 sm:pb-6 pt-2">
-      {artworkSlot ?? (
-        <TrackArtwork
-          className={cn(
-            "size-28 sm:size-36 lg:size-44 shrink-0 shadow-2xl ring-1 ring-white/10",
-            circularArtwork ? "rounded-full" : "rounded-xl sm:rounded-none",
+    <header className="relative flex flex-col gap-3.5 sm:gap-5 px-1 pb-4 sm:pb-6 pt-2">
+      {/* Top Header Row: Artwork + Metadata Side-by-Side */}
+      <div className="flex flex-row items-center sm:items-end gap-3.5 sm:gap-6 w-full min-w-0">
+        <div className="shrink-0">
+          {artworkSlot ?? (
+            <TrackArtwork
+              className={cn(
+                "size-24 sm:size-36 lg:size-44 shadow-2xl ring-1 ring-white/10 object-cover",
+                circularArtwork ? "rounded-full" : "rounded-xl sm:rounded-2xl",
+              )}
+              artworkUrl={artworkUrl}
+              iconSize={48}
+              loading="eager"
+              size={144}
+              variant={artworkVariant}
+            />
           )}
-          artworkUrl={artworkUrl}
-          iconSize={56}
-          loading="eager"
-          size={144}
-          variant={artworkVariant}
-        />
-      )}
+        </div>
 
-      <div className="flex min-w-0 flex-1 flex-col justify-end gap-1.5 sm:gap-2 w-full">
-        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          {eyebrow}
-        </span>
-        <h1 className="truncate text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-foreground">
-          {title}
-        </h1>
-        {subtitle ? <div className="text-sm text-foreground/80">{subtitle}</div> : null}
-        {meta ? <p className="text-xs text-muted-foreground">{meta}</p> : null}
+        <div className="flex min-w-0 flex-1 flex-col justify-center sm:justify-end gap-1 sm:gap-1.5">
+          {eyebrow ? (
+            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              {eyebrow}
+            </span>
+          ) : null}
+          <h1 className="truncate text-xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-foreground leading-tight">
+            {title}
+          </h1>
+          {subtitle ? <div className="truncate text-xs sm:text-sm text-foreground/80">{subtitle}</div> : null}
+          {meta ? <p className="truncate text-xs text-muted-foreground">{meta}</p> : null}
+        </div>
+      </div>
 
-        <div className="mt-2.5 flex flex-wrap items-center gap-2 sm:gap-2.5">
-          {playback ? (
+      {/* Action Controls Row */}
+      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full">
+        {playback ? (
             /*
              * Reflects this collection's own state, not the player's: it only becomes a
              * Pause control while the track being played belongs here. Playing something
@@ -325,7 +334,6 @@ export function MediaHeader({
 
           {actions}
         </div>
-      </div>
     </header>
   );
 }

@@ -259,25 +259,11 @@ export function Layout({
           {ambientArtwork ? (
             <span
               key={ambientArtwork}
-              className="pointer-events-none absolute inset-x-0 top-0 h-[22rem] overflow-hidden [mask-image:linear-gradient(to_bottom,background_25%,transparent)] rounded-tl-lg"
+              className="pointer-events-none absolute inset-x-0 top-0 h-[22rem] overflow-hidden [mask-image:linear-gradient(to_bottom,background_25%,transparent)] rounded-tl-lg transform-gpu will-change-transform"
               aria-hidden="true"
               data-fx="ambient"
             >
-              {/*
-                The blur radius drives the intermediate textures the compositor allocates, and
-                this is one of the largest surfaces in the window. 32px is enough here because
-                the source is a 120px image stretched across the full width — a ~20x upscale is
-                already most of the softness, and the filter only finishes the job.
-
-                `scale-125` is gone for the same reason: the negative insets already extend this
-                well past the clipped box on three sides, so the scale was adding composited
-                area to hide edges that were never reachable.
-              */}
-              <span className="absolute -inset-x-1/4 -top-1/2 bottom-0 opacity-40 blur-[32px] saturate-[2]">
-                {/*
-                  Deliberately the smallest variant: this is blurred and dropped to 40% opacity,
-                  so nothing above 120px survives to be seen — it only costs texture.
-                */}
+              <span className="absolute -inset-x-1/4 -top-1/2 bottom-0 opacity-40 blur-[24px] saturate-[1.6] transform-gpu translate-z-0">
                 <TrackArtwork
                   className="size-full"
                   size={120}
