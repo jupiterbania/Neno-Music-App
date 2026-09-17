@@ -125,18 +125,18 @@ export function MobilePlayerBar({ onOpenNowPlaying, className }: MobilePlayerBar
     <AnimatePresence>
       <motion.div
         layout
-        initial={{ y: 28, opacity: 0, scale: 0.96 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: 28, opacity: 0, scale: 0.96 }}
-        whileTap={{ scale: 0.98 }}
-        transition={{ type: "spring", stiffness: 420, damping: 28 }}
+        initial={{ y: 24, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 24, opacity: 0 }}
+        whileTap={{ scale: 0.985 }}
+        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
         onClick={onOpenNowPlaying}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         className={cn(
-          "relative flex w-full flex-col overflow-hidden rounded-2xl transform-gpu",
-          "bg-[#1c1d22]/95 border border-white/15 shadow-[0_12px_36px_rgba(0,0,0,0.65)]",
-          "cursor-pointer select-none backdrop-blur-2xl",
+          "relative flex w-full flex-col overflow-hidden rounded-2xl transform-gpu will-change-transform",
+          "bg-[#1c1d22] border border-white/15 shadow-[0_12px_36px_rgba(0,0,0,0.65)]",
+          "cursor-pointer select-none",
           className,
         )}
       >

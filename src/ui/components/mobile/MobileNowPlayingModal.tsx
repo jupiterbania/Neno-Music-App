@@ -118,12 +118,12 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
   onDragEnd,
 }: SwipeableQueueRowProps) {
   const rowElRef = useRef<HTMLDivElement | null>(null);
+  const leftActionRef = useRef<HTMLDivElement | null>(null);
+  const rightActionRef = useRef<HTMLDivElement | null>(null);
   const touchStartXRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
   const currentOffsetRef = useRef<number>(0);
   const isHorizontalSwipeRef = useRef<boolean | null>(null);
-  const [swipeDirection, setSwipeDirection] = useState<"left" | "right" | null>(null);
-  const [swipeProgress, setSwipeProgress] = useState<number>(0);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0].clientX;
@@ -140,17 +140,18 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
     const deltaX = e.touches[0].clientX - touchStartXRef.current;
     const deltaY = e.touches[0].clientY - touchStartYRef.current;
 
+    // Determine direction once beyond threshold
     if (isHorizontalSwipeRef.current === null) {
-      if (Math.abs(deltaX) > 7 && Math.abs(deltaX) > Math.abs(deltaY) + 2) {
+      if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY) + 4) {
         isHorizontalSwipeRef.current = true;
-      } else if (Math.abs(deltaY) > 7) {
+      } else if (Math.abs(deltaY) > 8) {
         isHorizontalSwipeRef.current = false;
+        return;
       }
     }
 
+    // Only handle horizontal swipe; let vertical scroll pass freely with 0 lag
     if (isHorizontalSwipeRef.current === true) {
-      e.stopPropagation();
-
       let clamped = deltaX;
       if (clamped > 110) clamped = 110 + (clamped - 110) * 0.25;
       if (clamped < -110) clamped = -110 + (clamped + 110) * 0.25;
@@ -161,14 +162,22 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
       }
 
       if (clamped > 0) {
-        setSwipeDirection("right");
-        setSwipeProgress(Math.min(1, clamped / 70));
+        if (leftActionRef.current) {
+          leftActionRef.current.style.opacity = String(Math.min(1, Math.max(0.15, clamped / 65)));
+        }
+        if (rightActionRef.current) {
+          rightActionRef.current.style.opacity = "0";
+        }
       } else if (clamped < 0) {
-        setSwipeDirection("left");
-        setSwipeProgress(Math.min(1, Math.abs(clamped) / 70));
+        if (rightActionRef.current) {
+          rightActionRef.current.style.opacity = String(Math.min(1, Math.max(0.15, Math.abs(clamped) / 65)));
+        }
+        if (leftActionRef.current) {
+          leftActionRef.current.style.opacity = "0";
+        }
       } else {
-        setSwipeDirection(null);
-        setSwipeProgress(0);
+        if (leftActionRef.current) leftActionRef.current.style.opacity = "0";
+        if (rightActionRef.current) rightActionRef.current.style.opacity = "0";
       }
     }
   };
@@ -187,7 +196,7 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
       if (offset < -65) {
         // SWIPE LEFT -> REMOVE
         if (rowElRef.current) {
-          rowElRef.current.style.transition = "transform 0.2s ease-out, opacity 0.2s ease-out";
+          rowElRef.current.style.transition = "transform 0.18s ease-out, opacity 0.18s ease-out";
           rowElRef.current.style.transform = "translate3d(-105%, 0, 0)";
           rowElRef.current.style.opacity = "0";
         }
@@ -198,22 +207,22 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
       } else if (offset > 65) {
         // SWIPE RIGHT -> INSTANT PLAY
         if (rowElRef.current) {
-          rowElRef.current.style.transition = "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)";
+          rowElRef.current.style.transition = "transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)";
           rowElRef.current.style.transform = "translate3d(0, 0, 0)";
         }
-        setSwipeDirection(null);
-        setSwipeProgress(0);
+        if (leftActionRef.current) leftActionRef.current.style.opacity = "0";
+        if (rightActionRef.current) rightActionRef.current.style.opacity = "0";
         onInstantPlay(absoluteIndex, track);
         return;
       }
     }
 
     if (rowElRef.current) {
-      rowElRef.current.style.transition = "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)";
+      rowElRef.current.style.transition = "transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)";
       rowElRef.current.style.transform = "translate3d(0, 0, 0)";
     }
-    setSwipeDirection(null);
-    setSwipeProgress(0);
+    if (leftActionRef.current) leftActionRef.current.style.opacity = "0";
+    if (rightActionRef.current) rightActionRef.current.style.opacity = "0";
   };
 
   return (
@@ -228,11 +237,9 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
     >
       {/* 1. Left Action (Swipe Right): Instant Play */}
       <div
-        className={cn(
-          "absolute inset-y-0 left-0 w-full flex items-center gap-2 pl-4 rounded-xl transition-opacity bg-gradient-to-r from-emerald-600/90 via-emerald-500/80 to-transparent text-white font-semibold text-xs",
-          swipeDirection === "right" ? "opacity-100" : "opacity-0 pointer-events-none",
-        )}
-        style={{ opacity: swipeDirection === "right" ? Math.max(0.2, swipeProgress) : 0 }}
+        ref={leftActionRef}
+        style={{ opacity: 0 }}
+        className="absolute inset-y-0 left-0 w-full flex items-center gap-2 pl-4 rounded-xl pointer-events-none bg-gradient-to-r from-emerald-600/90 via-emerald-500/80 to-transparent text-white font-semibold text-xs"
       >
         <div className="flex size-7 items-center justify-center rounded-full bg-white text-emerald-700 shadow-md">
           <PlayActiveIcon size={16} className="translate-x-0.5" />
@@ -242,11 +249,9 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
 
       {/* 2. Right Action (Swipe Left): Remove from Up Next */}
       <div
-        className={cn(
-          "absolute inset-y-0 right-0 w-full flex items-center justify-end gap-2 pr-4 rounded-xl transition-opacity bg-gradient-to-l from-rose-600/90 via-rose-500/80 to-transparent text-white font-semibold text-xs",
-          swipeDirection === "left" ? "opacity-100" : "opacity-0 pointer-events-none",
-        )}
-        style={{ opacity: swipeDirection === "left" ? Math.max(0.2, swipeProgress) : 0 }}
+        ref={rightActionRef}
+        style={{ opacity: 0 }}
+        className="absolute inset-y-0 right-0 w-full flex items-center justify-end gap-2 pr-4 rounded-xl pointer-events-none bg-gradient-to-l from-rose-600/90 via-rose-500/80 to-transparent text-white font-semibold text-xs"
       >
         <span className="text-sm font-bold tracking-wide drop-shadow-sm">Remove</span>
         <div className="flex size-7 items-center justify-center rounded-full bg-white text-rose-700 shadow-md">
@@ -262,7 +267,7 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
         onClick={() => onPlay(absoluteIndex)}
-        className="relative z-10 flex items-center justify-between gap-3 py-2 px-2.5 rounded-xl bg-[#141414] hover:bg-[#1c1c1c] active:bg-[#202020] border border-white/5 cursor-pointer will-change-transform"
+        className="relative z-10 flex items-center justify-between gap-3 py-2 px-2.5 rounded-xl bg-[#141414] hover:bg-[#1c1c1c] active:bg-[#202020] border border-white/5 cursor-pointer will-change-transform transform-gpu"
       >
         <div className="size-11 shrink-0 overflow-hidden rounded-lg shadow-sm border border-white/10 bg-black/40">
           <TrackArtwork
@@ -696,25 +701,11 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
     queueScrollTopRef.current = e.currentTarget.scrollTop;
   };
 
-  const handleQueueListTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (queueTouchStartYRef.current === null) return;
-    const deltaY = e.touches[0].clientY - queueTouchStartYRef.current;
-    const scrollTop = e.currentTarget.scrollTop;
-
-    // If at top of list and pulling down, let gesture bubble to parent sheet drag handler
-    if (queueScrollTopRef.current <= 0 && scrollTop <= 0 && deltaY > 0) {
-      return;
-    }
-    // Otherwise stop propagation so list container scrolls
-    e.stopPropagation();
-  };
-
   const handleQueueListTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
     if (queueTouchStartYRef.current === null) return;
     const deltaY = e.changedTouches[0].clientY - queueTouchStartYRef.current;
-    const scrollTop = e.currentTarget.scrollTop;
 
-    if (queueScrollTopRef.current <= 0 && scrollTop <= 0 && deltaY > 35) {
+    if (queueScrollTopRef.current <= 0 && deltaY > 40) {
       if (queueSheetState === "full") {
         setQueueSheetState("half");
       } else if (queueSheetState === "half") {
@@ -835,21 +826,21 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
       {isOpen && (
         <motion.div
           key="mobile-now-playing-modal"
-          initial={{ y: "100%", opacity: 0.8 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: "100%", opacity: 0.8 }}
-          transition={{ type: "spring", stiffness: 340, damping: 32, mass: 0.8 }}
+          initial={{ y: "100%" }}
+          animate={{ y: 0 }}
+          exit={{ y: "100%" }}
+          transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
           className="fixed inset-0 z-50 flex flex-col bg-[#050505] text-foreground select-none overflow-hidden transform-gpu will-change-transform"
         >
           {/* Dynamic Ambient Background reacting to Artwork */}
           {hdArtworkUrl && (
             <div
               key={hdArtworkUrl}
-              className="absolute inset-0 -z-20 pointer-events-none scale-125 bg-cover bg-center opacity-30 blur-2xl transition-opacity duration-700 transform-gpu translate-z-0"
+              className="absolute inset-0 -z-20 pointer-events-none scale-110 bg-cover bg-center opacity-25 blur-xl transition-opacity duration-500 transform-gpu translate-z-0"
               style={{ backgroundImage: `url("${hdArtworkUrl}")` }}
             />
           )}
-          <div className="absolute inset-0 -z-10 pointer-events-none bg-gradient-to-b from-black/40 via-[#0a0a0a]/80 to-[#050505]" />
+          <div className="absolute inset-0 -z-10 pointer-events-none bg-gradient-to-b from-black/50 via-[#0a0a0a]/80 to-[#050505]" />
 
           {/* ── TOP HEADER (Chevron, Headphones/Lyrics Switcher, Cast, 3-Dots) ── */}
           {queueSheetState !== "full" && (
@@ -1280,158 +1271,158 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
         {/* ── UP NEXT QUEUE BOTTOM SHEET (Only in Audio Mode) ── */}
         {audioMode === "audio" && (
           <motion.div
-          animate={{
-            height:
-              queueSheetState === "full"
-                ? "100%"
-                : queueSheetState === "half"
-                ? "52%"
-                : "48px",
-          }}
-          transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-          className={cn(
-            "fixed inset-x-0 bottom-0 z-40 flex flex-col transition-colors duration-200",
-            queueSheetState === "full"
-              ? "bg-[#080808] text-foreground"
-              : queueSheetState === "half"
-              ? "bg-[#141414] rounded-t-3xl border-t border-white/15 shadow-[0_-16px_48px_rgba(0,0,0,0.85)]"
-              : "bg-black/30 backdrop-blur-md border-t border-white/10 cursor-pointer hover:bg-black/50",
-          )}
-        >
-          {/* DRAG HANDLE & HEADER BAR */}
-          <div
-            onTouchStart={handleSheetTouchStart}
-            onTouchEnd={handleSheetTouchEnd}
-            onClick={() => {
-              if (queueSheetState === "collapsed") {
-                setQueueSheetState("half");
-              }
+            initial={false}
+            animate={{
+              y:
+                queueSheetState === "full"
+                  ? "0%"
+                  : queueSheetState === "half"
+                  ? "48%"
+                  : "calc(100% - 50px)",
             }}
-            className="flex shrink-0 flex-col pt-2 pb-2 px-4 cursor-grab active:cursor-grabbing select-none"
-          >
-            {/* STAGE 2: STICKY MINI PLAYER BAR */}
-            {queueSheetState === "full" && (
-              <div className="flex items-center justify-between pb-3 pt-1 border-b border-white/10">
-                <div
-                  onClick={() => setQueueSheetState("half")}
-                  className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
-                >
-                  <div className="size-11 shrink-0 overflow-hidden rounded-lg shadow border border-white/10">
-                    <TrackArtwork
-                      artworkUrl={currentTrack?.artworkUrl}
-                      size={44}
-                      className="size-full object-cover"
-                    />
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-bold text-white">
-                      {currentTrack?.title || "No track playing"}
-                    </span>
-                    <span className="truncate text-xs font-medium text-white/60">
-                      {currentTrack?.artist || "Unknown Artist"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleCastClick}
-                    className="flex size-9 items-center justify-center text-white/80 hover:text-white"
-                    aria-label="Cast"
-                  >
-                    <ScreencastIcon size={20} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void playerController.togglePlayPause()}
-                    className="flex size-9 items-center justify-center text-white hover:opacity-80 active:scale-90"
-                    aria-label={isPlaying ? "Pause" : "Play"}
-                  >
-                    {isPlaying ? <PauseActiveIcon size={22} /> : <PlayActiveIcon size={22} />}
-                  </button>
-                </div>
-              </div>
+            transition={{ duration: 0.26, ease: [0.32, 0.72, 0, 1] }}
+            className={cn(
+              "fixed inset-x-0 bottom-0 top-0 z-40 flex flex-col transform-gpu will-change-transform",
+              queueSheetState === "full"
+                ? "bg-[#0a0a0a] text-foreground"
+                : queueSheetState === "half"
+                ? "bg-[#141414] rounded-t-3xl border-t border-white/15 shadow-[0_-16px_48px_rgba(0,0,0,0.85)]"
+                : "bg-gradient-to-t from-[#0e0e0e] to-[#161616] border-t border-white/10 cursor-pointer",
             )}
+          >
+            {/* DRAG HANDLE & HEADER BAR */}
+            <div
+              onTouchStart={handleSheetTouchStart}
+              onTouchEnd={handleSheetTouchEnd}
+              onClick={() => {
+                if (queueSheetState === "collapsed") {
+                  setQueueSheetState("half");
+                }
+              }}
+              className="flex shrink-0 flex-col pt-2 pb-2 px-4 cursor-grab active:cursor-grabbing select-none"
+            >
+              {/* STAGE 2: STICKY MINI PLAYER BAR */}
+              {queueSheetState === "full" && (
+                <div className="flex items-center justify-between pb-3 pt-1 border-b border-white/10">
+                  <div
+                    onClick={() => setQueueSheetState("half")}
+                    className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+                  >
+                    <div className="size-11 shrink-0 overflow-hidden rounded-lg shadow border border-white/10">
+                      <TrackArtwork
+                        artworkUrl={currentTrack?.artworkUrl}
+                        size={44}
+                        className="size-full object-cover"
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-sm font-bold text-white">
+                        {currentTrack?.title || "No track playing"}
+                      </span>
+                      <span className="truncate text-xs font-medium text-white/60">
+                        {currentTrack?.artist || "Unknown Artist"}
+                      </span>
+                    </div>
+                  </div>
 
-            {/* Horizontal Pill Drag Handle */}
-            <div className="mx-auto h-1 w-11 rounded-full bg-white/40 my-1" />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCastClick}
+                      className="flex size-9 items-center justify-center text-white/80 hover:text-white"
+                      aria-label="Cast"
+                    >
+                      <ScreencastIcon size={20} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void playerController.togglePlayPause()}
+                      className="flex size-9 items-center justify-center text-white hover:opacity-80 active:scale-90"
+                      aria-label={isPlaying ? "Pause" : "Play"}
+                    >
+                      {isPlaying ? <PauseActiveIcon size={22} /> : <PlayActiveIcon size={22} />}
+                    </button>
+                  </div>
+                </div>
+              )}
 
-            {/* "Playing from [Source]" Peek / Header */}
-            {queueSheetState === "collapsed" ? (
-              <div className="text-center pb-1">
-                <span className="truncate text-xs font-medium text-white/80">
-                  {playingFromTitle}
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between pt-1 pb-1">
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[11px] font-medium text-white/50 leading-tight">
-                    Playing from
-                  </span>
-                  <span className="truncate text-sm font-bold text-white leading-tight">
+              {/* Horizontal Pill Drag Handle */}
+              <div className="mx-auto h-1 w-11 rounded-full bg-white/40 my-1" />
+
+              {/* "Playing from [Source]" Peek / Header */}
+              {queueSheetState === "collapsed" ? (
+                <div className="text-center pb-1">
+                  <span className="truncate text-xs font-medium text-white/80">
                     {playingFromTitle}
                   </span>
                 </div>
-
-                {/* Save Queue as Playlist Button */}
-                <button
-                  type="button"
-                  onClick={handleSaveQueueAsPlaylist}
-                  disabled={saveStatus !== "idle"}
-                  className="flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 px-3 py-1.5 text-xs font-semibold text-white transition-transform active:scale-95 disabled:opacity-50"
-                >
-                  <BookmarkIcon size={14} />
-                  <span>
-                    {saveStatus === "saving"
-                      ? "Saving..."
-                      : saveStatus === "saved"
-                      ? "Saved!"
-                      : "Save"}
-                  </span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* UP NEXT TRACK LIST */}
-          {queueSheetState !== "collapsed" && (
-            <div
-              onTouchStart={handleQueueListTouchStart}
-              onTouchMove={handleQueueListTouchMove}
-              onTouchEnd={handleQueueListTouchEnd}
-              className="flex-1 overflow-y-auto overscroll-contain px-3 pb-20 touch-pan-y"
-            >
-              {upcomingTracks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-white/50 text-xs">
-                  <p>No upcoming tracks in queue.</p>
-                </div>
               ) : (
-                upcomingTracks.map(({ track, absoluteIndex }) => (
-                  <SwipeableQueueRow
-                    key={`${track.id}-${absoluteIndex}`}
-                    track={track}
-                    absoluteIndex={absoluteIndex}
-                    isDragged={draggedIndex === absoluteIndex}
-                    dropEdge={
-                      dropTarget?.index === absoluteIndex
-                        ? dropTarget.insertAfter
-                          ? "after"
-                          : "before"
-                        : null
-                    }
-                    onPlay={handlePlayQueueTrack}
-                    onInstantPlay={handleInstantPlayTrack}
-                    onRemove={handleRemoveTrack}
-                    onDragStart={handleRowDragStart}
-                    onDragMove={handleRowDragMove}
-                    onDragEnd={handleRowDragEnd}
-                  />
-                ))
+                <div className="flex items-center justify-between pt-1 pb-1">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[11px] font-medium text-white/50 leading-tight">
+                      Playing from
+                    </span>
+                    <span className="truncate text-sm font-bold text-white leading-tight">
+                      {playingFromTitle}
+                    </span>
+                  </div>
+
+                  {/* Save Queue as Playlist Button */}
+                  <button
+                    type="button"
+                    onClick={handleSaveQueueAsPlaylist}
+                    disabled={saveStatus !== "idle"}
+                    className="flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 px-3 py-1.5 text-xs font-semibold text-white transition-transform active:scale-95 disabled:opacity-50"
+                  >
+                    <BookmarkIcon size={14} />
+                    <span>
+                      {saveStatus === "saving"
+                        ? "Saving..."
+                        : saveStatus === "saved"
+                        ? "Saved!"
+                        : "Save"}
+                    </span>
+                  </button>
+                </div>
               )}
             </div>
-          )}
+
+            {/* UP NEXT TRACK LIST */}
+            {queueSheetState !== "collapsed" && (
+              <div
+                onTouchStart={handleQueueListTouchStart}
+                onTouchEnd={handleQueueListTouchEnd}
+                className="flex-1 overflow-y-auto overscroll-contain px-3 pb-20 touch-pan-y"
+              >
+                {upcomingTracks.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-white/50 text-xs">
+                    <p>No upcoming tracks in queue.</p>
+                  </div>
+                ) : (
+                  upcomingTracks.map(({ track, absoluteIndex }) => (
+                    <SwipeableQueueRow
+                      key={`${track.id}-${absoluteIndex}`}
+                      track={track}
+                      absoluteIndex={absoluteIndex}
+                      isDragged={draggedIndex === absoluteIndex}
+                      dropEdge={
+                        dropTarget?.index === absoluteIndex
+                          ? dropTarget.insertAfter
+                            ? "after"
+                            : "before"
+                          : null
+                      }
+                      onPlay={handlePlayQueueTrack}
+                      onInstantPlay={handleInstantPlayTrack}
+                      onRemove={handleRemoveTrack}
+                      onDragStart={handleRowDragStart}
+                      onDragMove={handleRowDragMove}
+                      onDragEnd={handleRowDragEnd}
+                    />
+                  ))
+                )}
+              </div>
+            )}
           </motion.div>
         )}
 
