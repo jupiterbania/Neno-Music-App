@@ -28,9 +28,6 @@ jobs:
   build-ios:
     name: Build iOS App
     runs-on: macos-15
-    env:
-      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
-      CMAKE_POLICY_DEFAULT_CMP0000: "OLD"
 
     steps:
       - name: Check out repository
@@ -40,6 +37,19 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
+
+      - name: Setup CMake policy wrapper
+        shell: bash
+        run: |
+          REAL_CMAKE="$(which cmake)"
+          echo "Original CMake found at: $REAL_CMAKE"
+          mkdir -p "$HOME/cmake-bin"
+          cat << EOF > "$HOME/cmake-bin/cmake"
+#!/bin/bash
+exec "$REAL_CMAKE" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 "\$@"
+EOF
+          chmod +x "$HOME/cmake-bin/cmake"
+          echo "$HOME/cmake-bin" >> "$GITHUB_PATH"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -74,8 +84,6 @@ jobs:
         run: npm run build
 
       - name: Build Tauri iOS App
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
         run: |
           EXPORT_OPT="${{ github.event.inputs.export_method || 'debugging' }}"
           npx tauri ios build --export-method "$EXPORT_OPT" --no-sign
