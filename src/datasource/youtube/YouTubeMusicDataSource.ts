@@ -6637,48 +6637,72 @@ export class YouTubeMusicDataSource extends DataSource {
    * One filtered search.
    *
    * `search` samples every category at once and is what the results page opens with; this goes
-   * deep on one of them, which is how the category tabs get more than the handful of rows a
-   * mixed search returns.
+   * deep on one of them with continuation pagination, which is how the category tabs get rich,
+   * comprehensive search results (50-100+ songs/albums/artists/playlists) matching YouTube Music.
    */
-  async searchCategory(query: string, category: SearchCategory): Promise<SearchResults> {
+  async searchCategory(
+    query: string,
+    category: SearchCategory,
+    onUpdate?: (results: SearchResults) => void,
+  ): Promise<SearchResults> {
     const normalizedQuery = query.trim();
     const empty: SearchResults = { artists: [], tracks: [], albums: [], playlists: [] };
     if (!normalizedQuery) return empty;
 
-    const cacheKey = `youtube-music:search:${category}:v1:${normalizedQuery.toLocaleLowerCase()}`;
+    const cacheKey = `youtube-music:search:${category}:v2:${normalizedQuery.toLocaleLowerCase()}`;
     const cached = await getCachedJson<SearchResults>(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      onUpdate?.(cached);
+      return cached;
+    }
 
     try {
       const client = await this.getMusicClient();
-      const response = await client.music.search(normalizedQuery, { type: category });
-      const items = this.collectMusicItems(response.page, BROWSE_ITEM_TYPES);
+      let response: any = await client.music.search(normalizedQuery, { type: category });
+      const items = this.collectMusicItems(response?.page ?? response, BROWSE_ITEM_TYPES);
 
-      const results: SearchResults = {
+      const buildResults = (currentItems: MusicItem[]): SearchResults => ({
         artists: this.uniqueById(
-          items
+          currentItems
             .filter((item) => item.item_type === "artist")
             .map((item) => this.toArtist(item))
             .filter((item): item is Artist => Boolean(item)),
         ),
         tracks: this.uniqueById(
-          this.songOrVideoItems(items)
+          this.songOrVideoItems(currentItems)
             .map((item) => this.toTrack(item))
             .filter((item): item is Track => Boolean(item)),
         ),
         albums: this.uniqueById(
-          items
+          currentItems
             .filter((item) => item.item_type === "album")
             .map((item) => this.toAlbum(item))
             .filter((item): item is Album => Boolean(item)),
         ),
         playlists: this.uniqueById(
-          items
+          currentItems
             .filter((item) => item.item_type === "playlist")
             .map((item) => this.toPlaylist(item))
             .filter((item): item is Playlist => Boolean(item)),
         ),
-      };
+      });
+
+      let results = buildResults(items);
+      onUpdate?.(results);
+
+      // Deep continuation fetching: load up to 5 additional pages (50-100+ items)
+      for (let pageIdx = 0; pageIdx < 5 && response?.has_continuation; pageIdx += 1) {
+        try {
+          response = await response.getContinuation();
+          const nextItems = this.collectMusicItems(response?.page ?? response, BROWSE_ITEM_TYPES);
+          if (nextItems.length === 0) break;
+          items.push(...nextItems);
+          results = buildResults(items);
+          onUpdate?.(results);
+        } catch {
+          break;
+        }
+      }
 
       await setCachedJson(cacheKey, results);
       logInternalInfo("YouTubeMusicDataSource.searchCategory", {

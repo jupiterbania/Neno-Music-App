@@ -21,8 +21,8 @@ android {
         applicationId = "com.neno.desktop"
         minSdk = 26
         targetSdk = 36
-        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
-        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.2")
+        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "2").toInt()
+        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.3")
     }
     splits {
         abi {

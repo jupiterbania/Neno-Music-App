@@ -48,7 +48,10 @@ class MainActivity : TauriActivity() {
     private val backgroundKeepaliveHandler = Handler(Looper.getMainLooper())
     private val backgroundKeepaliveRunnable = object : Runnable {
         override fun run() {
-            targetWebView?.evaluateJavascript("void 0;", null)
+            targetWebView?.let { wv ->
+                wv.resumeTimers()
+                wv.evaluateJavascript("void 0;", null)
+            }
             backgroundKeepaliveHandler.postDelayed(this, 750)
         }
     }

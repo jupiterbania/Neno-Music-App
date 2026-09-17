@@ -41,8 +41,8 @@ const FADE_STEP: Duration = Duration::from_millis(20);
 
 /// How long a decoder read waits for bytes that have not landed yet before giving up.
 const READ_TIMEOUT: Duration = Duration::from_secs(20);
-/// Poll interval while waiting on the download. Short enough to be inaudible.
-const READ_POLL: Duration = Duration::from_millis(10);
+/// Poll interval while waiting on the download. Short enough to be inaudible and instantaneous.
+const READ_POLL: Duration = Duration::from_millis(2);
 
 /// A decoded stream ready to be handed to a deck. rodio resamples it to the device's rate.
 pub(crate) type BoxedSource = Box<dyn Source + Send>;

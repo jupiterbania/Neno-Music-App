@@ -27,6 +27,11 @@ function MobileHeaderInner({
   const isSignedIn =
     (libraryState.status === "ready" || libraryState.status === "loading") &&
     Boolean(account);
+  const isConnecting =
+    !isSignedIn &&
+    (libraryState.status === "restoring" ||
+      libraryState.status === "loading" ||
+      libraryState.status === "authorizing");
 
   const [isSigningIn, setIsSigningIn] = useState(false);
 
@@ -107,6 +112,25 @@ function MobileHeaderInner({
             />
             <span className="absolute bottom-0 right-0 size-2 rounded-full bg-emerald-500 ring-1.5 ring-background animate-pulse" />
           </motion.button>
+        ) : isConnecting ? (
+          <div className="relative flex h-8 w-[140px] shrink-0 items-center justify-between rounded-full border border-red-500/30 bg-gradient-to-r from-red-500/15 via-red-500/10 to-red-500/5 px-2.5 shadow-[0_0_12px_rgba(239,68,68,0.12)]">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="relative flex size-4 shrink-0 items-center justify-center rounded-full bg-red-600">
+                <svg viewBox="0 0 24 24" className="size-2 fill-white" aria-hidden="true">
+                  <circle cx="12" cy="12" r="7.5" fill="none" stroke="white" strokeWidth="2.2" />
+                  <polygon points="10,8.5 15.5,12 10,15.5" fill="white" />
+                </svg>
+                <span className="absolute -inset-0.5 rounded-full border border-red-500/60 animate-ping opacity-75" />
+              </div>
+              <span className="text-[11px] font-semibold text-foreground/90 truncate">
+                Connecting...
+              </span>
+            </div>
+            <span className="relative flex size-2 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+              <span className="relative inline-flex size-2 rounded-full bg-amber-500" />
+            </span>
+          </div>
         ) : (
           <GoogleSignInButton
             onClick={() => void handleSignIn()}

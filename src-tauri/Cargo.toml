@@ -1,6 +1,6 @@
 [package]
 name = "neno"
-version = "1.0.2"
+version = "1.0.3"
 description = "Neno - a music client"
 authors = ["you"]
 edition = "2021"

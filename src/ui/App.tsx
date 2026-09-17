@@ -74,7 +74,6 @@ import { useMediaSession } from "../player/useMediaSession";
 import { useAndroidMediaBridge } from "../player/androidMediaBridge";
 import { playerUIStore, usePlayerUIState } from "./stores/playerUIStore";
 import { AppLoadingScreen } from "./components/AppLoadingScreen";
-import { YouTubeConnectionPopup } from "./components/YouTubeConnectionPopup";
 import { AuthOverlay } from "./components/AuthOverlay";
 import { UpdateToast } from "./components/UpdateToast";
 import { ReleaseNoteDialog } from "./components/ReleaseNoteDialog";
@@ -2369,9 +2368,6 @@ export default function App() {
       />
       {loadingScreenState !== "hidden" && (
         <AppLoadingScreen isLeaving={loadingScreenState === "leaving"} />
-      )}
-      {loadingScreenState === "hidden" && (
-        <YouTubeConnectionPopup onOpenSettings={handleOpenSettings} />
       )}
       {showKeychainNotice ? (
         <KeychainNotice onContinue={handleKeychainNoticeContinue} />

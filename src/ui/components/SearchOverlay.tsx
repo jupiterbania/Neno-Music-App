@@ -191,6 +191,7 @@ export function SearchOverlay({
   const requestIdRef = useRef(0);
   const modifiersRef = useRef({ primary: false, shift: false });
   const recognitionRef = useRef<any>(null);
+  const instantSearchCacheRef = useRef<Map<string, { results: SearchResults; suggestions: string[] }>>(new Map());
 
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResults>({
@@ -291,14 +292,39 @@ export function SearchOverlay({
       return;
     }
 
+    const cacheKey = trimmed.toLowerCase();
+    const cached = instantSearchCacheRef.current.get(cacheKey);
+    if (cached) {
+      setSearchResults(cached.results);
+      setSuggestions(cached.suggestions);
+    }
+
     const requestId = ++requestIdRef.current;
-    setIsLoading(true);
+    if (!cached) setIsLoading(true);
+
     const timeoutId = window.setTimeout(() => {
       const updatePreview = (results: SearchResults) => {
-        if (requestId === requestIdRef.current) setSearchResults(results);
+        if (requestId === requestIdRef.current) {
+          setSearchResults(results);
+          instantSearchCacheRef.current.set(cacheKey, {
+            results,
+            suggestions: instantSearchCacheRef.current.get(cacheKey)?.suggestions ?? [],
+          });
+        }
       };
       const updateSuggestions = (nextSuggestions: string[]) => {
-        if (requestId === requestIdRef.current) setSuggestions(nextSuggestions);
+        if (requestId === requestIdRef.current) {
+          setSuggestions(nextSuggestions);
+          instantSearchCacheRef.current.set(cacheKey, {
+            results: instantSearchCacheRef.current.get(cacheKey)?.results ?? {
+              artists: [],
+              tracks: [],
+              albums: [],
+              playlists: [],
+            },
+            suggestions: nextSuggestions,
+          });
+        }
       };
       void Promise.allSettled([
         searchController.search(trimmed, updatePreview),
@@ -306,21 +332,25 @@ export function SearchOverlay({
       ])
         .then(([resultsResult, suggestionsResult]) => {
           if (requestId !== requestIdRef.current) return;
-          setSearchResults(
+          const finalResults =
             resultsResult.status === "fulfilled"
               ? resultsResult.value
-              : { artists: [], tracks: [], albums: [], playlists: [] },
-          );
-          setSuggestions(
+              : { artists: [], tracks: [], albums: [], playlists: [] };
+          const finalSuggestions =
             suggestionsResult.status === "fulfilled"
               ? suggestionsResult.value
-              : [],
-          );
+              : [];
+          setSearchResults(finalResults);
+          setSuggestions(finalSuggestions);
+          instantSearchCacheRef.current.set(cacheKey, {
+            results: finalResults,
+            suggestions: finalSuggestions,
+          });
         })
         .finally(() => {
           if (requestId === requestIdRef.current) setIsLoading(false);
         });
-    }, 120);
+    }, 80);
 
     return () => window.clearTimeout(timeoutId);
   }, [isOpen, query, searchController]);

@@ -28,7 +28,7 @@ import { DownloadsPanel } from "./DownloadsPanel";
 import { FloatingPanel } from "./FloatingPanel";
 import { NotificationsPanel } from "./NotificationsPanel";
 import { useToolbarItemVisible } from "../settings/toolbarItems";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import appIcon from "../../../assets/img/Logo.png";
 
 interface TitleBarProps {
@@ -336,26 +336,76 @@ export function TitleBar({
           side="bottom"
           className="w-64"
           trigger={
-            <Tooltip side="bottom" content={isSignedIn ? account?.name || "Account" : "Sign in"}>
-              <button
-                type="button"
-                onClick={() => setIsAccountPanelOpen((open) => !open)}
-                aria-haspopup="menu"
-                aria-expanded={isAccountPanelOpen}
-                aria-label={isSignedIn ? `Account: ${account?.name || "YouTube Music"}` : "Sign in"}
-                className={cn(
-                  "ml-0.5 grid size-7 place-items-center rounded-full transition-shadow",
-                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                  isAccountPanelOpen && "ring-1 ring-border",
-                )}
-              >
-                <AccountAvatar
-                  artworkUrl={isSignedIn ? account?.artworkUrl : undefined}
-                  className="size-7"
-                  iconSize={15}
-                />
-              </button>
-            </Tooltip>
+            <AnimatePresence mode="wait" initial={false}>
+              {isConnecting ? (
+                <motion.button
+                  key="connecting-pill"
+                  type="button"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  onClick={() => setIsAccountPanelOpen((open) => !open)}
+                  aria-haspopup="menu"
+                  aria-expanded={isAccountPanelOpen}
+                  aria-label="Connecting to YT Music"
+                  title="Connecting to YouTube Music"
+                  className={cn(
+                    "group relative flex h-7 w-[168px] shrink-0 items-center justify-between overflow-hidden rounded-full pl-1.5 pr-2.5 transition-all select-none",
+                    "bg-gradient-to-r from-red-500/15 via-red-500/10 to-red-500/5 hover:from-red-500/25 hover:to-red-500/15",
+                    "border border-red-500/30 hover:border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.12)] backdrop-blur-md",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    isAccountPanelOpen && "ring-1 ring-border",
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="relative flex size-4.5 shrink-0 items-center justify-center rounded-full bg-red-600 text-white shadow-xs">
+                      <svg viewBox="0 0 24 24" className="size-2.5 fill-white" aria-hidden="true">
+                        <circle cx="12" cy="12" r="7.5" fill="none" stroke="white" strokeWidth="2.2" />
+                        <polygon points="10,8.5 15.5,12 10,15.5" fill="white" />
+                      </svg>
+                      <span className="absolute -inset-0.5 rounded-full border border-red-500/60 animate-ping opacity-75" />
+                    </div>
+                    <span className="truncate text-[11px] font-semibold tracking-tight text-foreground/90">
+                      Connecting to YT Music
+                    </span>
+                  </div>
+                  <span className="relative flex size-2 shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex size-2 rounded-full bg-amber-500" />
+                  </span>
+                </motion.button>
+              ) : (
+                <motion.div
+                  key="account-avatar"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Tooltip side="bottom" content={isSignedIn ? account?.name || "Account" : "Sign in"}>
+                    <button
+                      type="button"
+                      onClick={() => setIsAccountPanelOpen((open) => !open)}
+                      aria-haspopup="menu"
+                      aria-expanded={isAccountPanelOpen}
+                      aria-label={isSignedIn ? `Account: ${account?.name || "YouTube Music"}` : "Sign in"}
+                      className={cn(
+                        "ml-0.5 grid size-7 place-items-center rounded-full transition-shadow",
+                        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                        isAccountPanelOpen && "ring-1 ring-border",
+                      )}
+                    >
+                      <AccountAvatar
+                        artworkUrl={isSignedIn ? account?.artworkUrl : undefined}
+                        className="size-7"
+                        iconSize={15}
+                      />
+                    </button>
+                  </Tooltip>
+                </motion.div>
+              )}
+            </AnimatePresence>
           }
         >
           {isSignedIn ? (

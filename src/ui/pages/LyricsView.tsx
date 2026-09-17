@@ -20,8 +20,14 @@ import { ArtistLinks } from "../components/ArtistLinks";
 import { TrackArtwork } from "../components/TrackArtwork";
 import { setAmbientArtwork } from "../stores/ambientArtworkStore";
 import { OFFSET_STEP_SEC, setLyricsOffset, useLyricsOffset } from "../settings/lyricsOffset";
-import { useLyricsFontScale } from "../settings/lyricsFontScale";
-import { TRANSLATION_OFF, useLyricsTranslationLang } from "../settings/lyricsTranslation";
+import { LYRICS_FONT_SCALES, setLyricsFontScale, useLyricsFontScale } from "../settings/lyricsFontScale";
+import {
+  TRANSLATION_LANGUAGES,
+  TRANSLATION_OFF,
+  getLanguageLabel,
+  setLyricsTranslationLang,
+  useLyricsTranslationLang,
+} from "../settings/lyricsTranslation";
 import { translateLines } from "../../datasource/translate";
 import { findActiveLineIndex, getLineProgress, isSyncedLyrics } from "./lyricsTiming";
 
@@ -628,10 +634,10 @@ export function LyricsView({ onClose }: LyricsViewProps) {
         </div>
       </div>
 
-      <footer className="relative flex h-10 shrink-0 items-center justify-between gap-3 px-6 pb-2 text-xs text-muted-foreground">
-        <span className="flex min-w-0 items-center gap-2">
+      <footer className="relative flex flex-wrap min-h-11 shrink-0 items-center justify-between gap-3 px-6 py-2 text-xs text-muted-foreground border-t border-white/5 bg-background/50 backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2.5">
           {timingLabel && (
-            <span className="flex shrink-0 items-center gap-1.5">
+            <span className="flex shrink-0 items-center gap-1.5 font-medium">
               <LyricsIcon size={13} aria-hidden="true" />
               {timingLabel}
             </span>
@@ -641,8 +647,13 @@ export function LyricsView({ onClose }: LyricsViewProps) {
           ) : (
             sourceLabel && <span className="truncate">via {sourceLabel}</span>
           )}
-        </span>
-        {isSynced && track && <LyricsOffsetControl trackId={track.id} offset={offset} />}
+          <LyricsTranslationPanel currentLang={translationLang} />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 ml-auto">
+          <LyricsFontSizeControl currentScale={fontScale} />
+          {isSynced && track && <LyricsOffsetControl trackId={track.id} offset={offset} />}
+        </div>
       </footer>
     </section>
   );
@@ -855,6 +866,131 @@ function LyricsSourcePanel({
         })}
       </div>
     </FloatingPanel>
+  );
+}
+
+function LyricsTranslationPanel({ currentLang }: { currentLang: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const activeLabel =
+    currentLang === TRANSLATION_OFF
+      ? "Translate: Off"
+      : `Translate: ${getLanguageLabel(currentLang)}`;
+
+  return (
+    <FloatingPanel
+      open={isOpen}
+      onOpenChange={setIsOpen}
+      side="top"
+      className="w-64 max-h-72 overflow-y-auto p-1.5"
+      triggerClassName="min-w-0"
+      trigger={
+        <button
+          type="button"
+          className={cn(
+            "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-all border",
+            currentLang !== TRANSLATION_OFF
+              ? "bg-primary/20 text-primary border-primary/40"
+              : "bg-card/70 text-muted-foreground border-white/10 hover:text-foreground hover:bg-card",
+          )}
+          aria-label="Change translation language"
+        >
+          <span className="truncate max-w-[130px]">{activeLabel}</span>
+        </button>
+      }
+    >
+      <div className="flex flex-col gap-0.5">
+        <div className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/20 mb-1">
+          Translation Language
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setLyricsTranslationLang(TRANSLATION_OFF);
+            setIsOpen(false);
+          }}
+          className={cn(
+            "flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-left transition-colors",
+            currentLang === TRANSLATION_OFF
+              ? "bg-primary text-primary-foreground font-bold"
+              : "hover:bg-muted text-foreground",
+          )}
+        >
+          <span>Off (Original lyrics)</span>
+        </button>
+        {TRANSLATION_LANGUAGES.map((code) => {
+          const isSelected = currentLang === code;
+          return (
+            <button
+              key={code}
+              type="button"
+              onClick={() => {
+                setLyricsTranslationLang(code);
+                setIsOpen(false);
+              }}
+              className={cn(
+                "flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-left transition-colors",
+                isSelected
+                  ? "bg-primary text-primary-foreground font-bold"
+                  : "hover:bg-muted text-foreground",
+              )}
+            >
+              <span>{getLanguageLabel(code)}</span>
+              {isSelected && <span className="text-[10px] font-bold">✓</span>}
+            </button>
+          );
+        })}
+      </div>
+    </FloatingPanel>
+  );
+}
+
+function LyricsFontSizeControl({ currentScale }: { currentScale: number }) {
+  const currentIndex = LYRICS_FONT_SCALES.findIndex((s) => s.value === currentScale);
+  const activeOption = LYRICS_FONT_SCALES[currentIndex !== -1 ? currentIndex : 2];
+
+  const handleDecrease = () => {
+    const prevIdx = Math.max(0, (currentIndex !== -1 ? currentIndex : 2) - 1);
+    setLyricsFontScale(LYRICS_FONT_SCALES[prevIdx].value);
+  };
+
+  const handleIncrease = () => {
+    const nextIdx = Math.min(
+      LYRICS_FONT_SCALES.length - 1,
+      (currentIndex !== -1 ? currentIndex : 2) + 1,
+    );
+    setLyricsFontScale(LYRICS_FONT_SCALES[nextIdx].value);
+  };
+
+  return (
+    <div
+      className="flex items-center gap-1 rounded-full bg-card/70 border border-white/10 px-1 py-0.5"
+      role="group"
+      aria-label="Lyrics font size"
+    >
+      <button
+        type="button"
+        onClick={handleDecrease}
+        disabled={currentIndex <= 0}
+        className="flex size-6 items-center justify-center rounded-full text-xs font-bold transition-colors hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+        aria-label="Decrease lyrics font size"
+        title="Smaller text"
+      >
+        A-
+      </button>
+      <span className="px-1 text-[11px] font-semibold tabular-nums text-foreground/80 min-w-[3.5rem] text-center">
+        {activeOption.label}
+      </span>
+      <button
+        type="button"
+        onClick={handleIncrease}
+        disabled={currentIndex >= LYRICS_FONT_SCALES.length - 1}
+        className="flex size-6 items-center justify-center rounded-full text-xs font-bold transition-colors hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+        aria-label="Increase lyrics font size"
+        title="Larger text"
+      >
+        A+
+      </button>
+    </div>
   );
 }
 

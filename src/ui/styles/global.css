@@ -652,3 +652,20 @@ button, a, input, select, [role="button"], [role="tab"] {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* 120fps Smooth Scrolling and Layout Containment */
+.smooth-scroll {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.track-list-viewport {
+  content-visibility: auto;
+  contain: layout style paint;
+}
+
+.optimize-gpu {
+  transform: translate3d(0, 0, 0);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}

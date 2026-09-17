@@ -117,9 +117,19 @@ async function attest(): Promise<CachedMinter> {
 
   const minter = await WebPoMinter.create({ integrityToken }, webPoSignalOutput);
   const ttlMs = (estimatedTtlSecs ?? FALLBACK_TTL_SECONDS) * 1000;
+  const expiresAt = Date.now() + Math.max(ttlMs - REFRESH_MARGIN_MS, 0);
+
+  // Proactively refresh before expiry so user requests never hit a cold attestation
+  const refreshInMs = Math.max(10_000, expiresAt - Date.now() - 60_000);
+  if (typeof window !== "undefined") {
+    setTimeout(() => {
+      cached = null;
+      warmPoToken();
+    }, refreshInMs);
+  }
 
   logInternalInfo("poToken.attest succeeded", { ttlSeconds: estimatedTtlSecs ?? FALLBACK_TTL_SECONDS });
-  return { minter, expiresAt: Date.now() + Math.max(ttlMs - REFRESH_MARGIN_MS, 0) };
+  return { minter, expiresAt };
 }
 
 function getMinter(): Promise<CachedMinter> {
@@ -147,6 +157,15 @@ export function warmPoToken(): void {
       message: error instanceof Error ? error.message : String(error),
     });
   });
+}
+
+// Eagerly pre-warm on load so the first song click is instant
+if (typeof window !== "undefined") {
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(() => warmPoToken(), { timeout: 2000 });
+  } else {
+    setTimeout(() => warmPoToken(), 800);
+  }
 }
 
 /**

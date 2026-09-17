@@ -16,7 +16,9 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
@@ -92,6 +94,32 @@ class MediaPlaybackService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var mediaSession: MediaSessionCompat? = null
     private val imageExecutor = Executors.newSingleThreadExecutor()
+
+    private val webViewKeepaliveHandler = Handler(Looper.getMainLooper())
+    private val webViewKeepaliveRunnable = object : Runnable {
+        override fun run() {
+            if (isPlaying) {
+                MainActivity.instance?.let { activity ->
+                    activity.runOnUiThread {
+                        activity.targetWebView?.let { webView ->
+                            webView.resumeTimers()
+                            webView.evaluateJavascript("void 0;", null)
+                        }
+                    }
+                }
+                webViewKeepaliveHandler.postDelayed(this, 1000)
+            }
+        }
+    }
+
+    private fun startWebViewKeepalive() {
+        webViewKeepaliveHandler.removeCallbacks(webViewKeepaliveRunnable)
+        webViewKeepaliveHandler.post(webViewKeepaliveRunnable)
+    }
+
+    private fun stopWebViewKeepalive() {
+        webViewKeepaliveHandler.removeCallbacks(webViewKeepaliveRunnable)
+    }
 
     private var audioManager: AudioManager? = null
     private var resumeOnCallEnd: Boolean = false
@@ -342,6 +370,7 @@ class MediaPlaybackService : Service() {
         isPlaying = true
         requestAudioFocus()
         acquireWakeLock()
+        startWebViewKeepalive()
         registerNoisyReceiver()
         MainActivity.instance?.dispatchMediaControl("play")
         sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "play"))
@@ -350,6 +379,7 @@ class MediaPlaybackService : Service() {
 
     private fun dispatchPause() {
         isPlaying = false
+        stopWebViewKeepalive()
         abandonAudioFocus()
         releaseWakeLock()
         unregisterNoisyReceiver()
@@ -437,9 +467,11 @@ class MediaPlaybackService : Service() {
                     isPlaying = true
                     requestAudioFocus()
                     acquireWakeLock()
+                    startWebViewKeepalive()
                     registerNoisyReceiver()
                 } else {
                     isPlaying = false
+                    stopWebViewKeepalive()
                     abandonAudioFocus()
                     releaseWakeLock()
                     unregisterNoisyReceiver()
@@ -686,6 +718,7 @@ class MediaPlaybackService : Service() {
     }
 
     override fun onDestroy() {
+        stopWebViewKeepalive()
         abandonAudioFocus()
         unregisterNoisyReceiver()
         unregisterAudioRouteMonitoring()

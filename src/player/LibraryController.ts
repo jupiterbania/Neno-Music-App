@@ -667,11 +667,15 @@ export class LibraryController {
     return this.dataSource.resolveLink(url);
   }
 
-  async searchCategory(query: string, category: SearchCategory): Promise<SearchResults> {
+  async searchCategory(
+    query: string,
+    category: SearchCategory,
+    onUpdate?: (results: SearchResults) => void,
+  ): Promise<SearchResults> {
     if (!this.dataSource.searchCategory) {
       return { artists: [], tracks: [], albums: [], playlists: [] };
     }
-    return this.dataSource.searchCategory(query, category);
+    return this.dataSource.searchCategory(query, category, onUpdate);
   }
 
   isAlbumSaved(albumId: string): boolean {

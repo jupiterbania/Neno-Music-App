@@ -146,7 +146,8 @@ export function useAndroidMediaBridge(): void {
       return;
     }
 
-    const isPlaying = status === "playing";
+    // Keep service informed of active playback even during loading transitions
+    const isPlaying = status === "playing" || status === "loading";
     const duration = Math.round(playerController.getDuration() || currentTrack.durationSec || 0);
     const position = Math.round(playerController.getCurrentTime() || 0);
     const hdArtworkUrl = currentTrack.artworkUrl

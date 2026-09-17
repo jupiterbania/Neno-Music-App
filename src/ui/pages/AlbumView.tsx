@@ -86,6 +86,7 @@ export function AlbumView({ album, playerController, libraryController }: AlbumV
         if (!active) return;
         showedTracks = true;
         setTracks(items);
+        if (items[0]) playerController.warmTrack(items[0]);
       })
       .catch(() => {
         if (active && !showedTracks) setError("Unable to load this album.");

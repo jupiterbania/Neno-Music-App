@@ -326,6 +326,7 @@ export function PlaylistView({ playlist, playerController, libraryController }: 
     })
       .then((page) => {
         showPage(page);
+        if (page.tracks[0]) playerController.warmTrack(page.tracks[0]);
       })
       .catch(() => {
         if (active && !showedPage) setError("Unable to load this playlist.");

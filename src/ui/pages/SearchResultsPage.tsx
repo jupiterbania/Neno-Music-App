@@ -9,6 +9,7 @@ import {
   ShuffleIcon,
   UserActiveIcon,
 } from "@/ui/icons";
+import { SpinnerSteps } from "@/components/motion/loader";
 import type {
   Album,
   Artist,
@@ -139,7 +140,10 @@ export function SearchResultsPage({
     let active = true;
     setIsDeepLoading(true);
     void libraryController
-      .searchCategory(query, category)
+      .searchCategory(query, category, (progressive) => {
+        if (!active) return;
+        setDeepResults(progressive);
+      })
       .then((fetched) => {
         if (!active) return;
         deepCacheRef.current.set(cacheKey, fetched);
@@ -452,6 +456,21 @@ export function SearchResultsPage({
                   <span className="rounded-full bg-muted/80 px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
                     {scopedResults.tracks.length}
                   </span>
+                  {scope === "all" && (
+                    <button
+                      type="button"
+                      onClick={() => setScope("songs")}
+                      className="ml-1 text-xs font-bold text-primary hover:underline active:scale-95 transition-transform"
+                    >
+                      See all
+                    </button>
+                  )}
+                  {isDeepLoading && scope === "songs" && (
+                    <div className="flex items-center gap-1.5 ml-2 text-xs font-semibold text-primary animate-pulse">
+                      <SpinnerSteps size={14} color="currentColor" />
+                      <span className="hidden sm:inline">Loading more songs...</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -518,6 +537,14 @@ export function SearchResultsPage({
                   );
                 })}
               </div>
+
+              {/* Bottom live indicator for streaming category results */}
+              {isDeepLoading && scope === "songs" && (
+                <div className="flex items-center justify-center gap-2 py-4 text-xs font-semibold text-muted-foreground animate-pulse">
+                  <SpinnerSteps size={16} color="currentColor" />
+                  <span>Loading full catalog of songs from YouTube Music...</span>
+                </div>
+              )}
             </section>
           )}
 
@@ -533,6 +560,21 @@ export function SearchResultsPage({
                   <span className="rounded-full bg-muted/80 px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
                     {scopedResults.artists.length}
                   </span>
+                  {scope === "all" && (
+                    <button
+                      type="button"
+                      onClick={() => setScope("artists")}
+                      className="ml-1 text-xs font-bold text-primary hover:underline active:scale-95 transition-transform"
+                    >
+                      See all
+                    </button>
+                  )}
+                  {isDeepLoading && scope === "artists" && (
+                    <div className="flex items-center gap-1.5 ml-2 text-xs font-semibold text-primary animate-pulse">
+                      <SpinnerSteps size={14} color="currentColor" />
+                      <span className="hidden sm:inline">Loading more artists...</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -602,6 +644,21 @@ export function SearchResultsPage({
                 <span className="rounded-full bg-muted/80 px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
                   {scopedResults.albums.length}
                 </span>
+                {scope === "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setScope("albums")}
+                    className="ml-1 text-xs font-bold text-primary hover:underline active:scale-95 transition-transform"
+                  >
+                    See all
+                  </button>
+                )}
+                {isDeepLoading && scope === "albums" && (
+                  <div className="flex items-center gap-1.5 ml-2 text-xs font-semibold text-primary animate-pulse">
+                    <SpinnerSteps size={14} color="currentColor" />
+                    <span className="hidden sm:inline">Loading more albums...</span>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:[grid-template-columns:repeat(auto-fill,minmax(10rem,1fr))]">
@@ -647,6 +704,21 @@ export function SearchResultsPage({
                 <span className="rounded-full bg-muted/80 px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
                   {scopedResults.playlists.length}
                 </span>
+                {scope === "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setScope("playlists")}
+                    className="ml-1 text-xs font-bold text-primary hover:underline active:scale-95 transition-transform"
+                  >
+                    See all
+                  </button>
+                )}
+                {isDeepLoading && scope === "playlists" && (
+                  <div className="flex items-center gap-1.5 ml-2 text-xs font-semibold text-primary animate-pulse">
+                    <SpinnerSteps size={14} color="currentColor" />
+                    <span className="hidden sm:inline">Loading more playlists...</span>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:[grid-template-columns:repeat(auto-fill,minmax(10rem,1fr))]">

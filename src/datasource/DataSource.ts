@@ -55,7 +55,7 @@ export abstract class DataSource {
   abstract getStreamUrl(track: Track): Promise<string>;
   search?(query: string, onUpdate?: (results: SearchResults) => void): Promise<SearchResults>;
   /** One filtered search. Narrower and deeper than `search`, which samples every category. */
-  searchCategory?(query: string, category: SearchCategory): Promise<SearchResults>;
+  searchCategory?(query: string, category: SearchCategory, onUpdate?: (results: SearchResults) => void): Promise<SearchResults>;
   /** Resolves a pasted YouTube link. Null when it points at something Zuno cannot open. */
   resolveLink?(url: string): Promise<ResolvedLink | null>;
   searchTracks?(query: string, onUpdate?: (tracks: Track[]) => void): Promise<Track[]>;

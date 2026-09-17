@@ -2918,8 +2918,8 @@ const MEDIA_SERVER_MAX_ITEMS: usize = 3;
 
 /// How long a range request waits for bytes that are still downloading before giving up.
 const MEDIA_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
-/// Poll interval while waiting. Short enough to be invisible, long enough not to spin.
-const MEDIA_WAIT_POLL: Duration = Duration::from_millis(20);
+/// Poll interval while waiting. Ultra-fast response so the decoder wakes up with zero lag.
+const MEDIA_WAIT_POLL: Duration = Duration::from_millis(5);
 
 /**
  * Publishes a body under `key`, evicting the coldest entries to stay under the cap.
@@ -3425,7 +3425,7 @@ const AUDIO_MIN_CHUNK_BYTES: u64 = 512 * 1024;
  * so whatever the first chunk weighs is exactly how long a click waits for sound. Sizing it
  * like the others meant ~700 KB before the first note; this is enough to decode a header.
  */
-const AUDIO_HEAD_CHUNK_BYTES: usize = 128 * 1024;
+const AUDIO_HEAD_CHUNK_BYTES: usize = 96 * 1024;
 
 /**
  * The two ranges a *playback* body is fetched in: a small head, then all the rest.

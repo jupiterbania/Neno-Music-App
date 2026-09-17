@@ -12,17 +12,76 @@ const CHANGE_EVENT = "lyrics-translation-change";
 
 export const TRANSLATION_OFF = "off";
 
-/** Codes the endpoint accepts; the labels come from the platform, not from a table here. */
+/** Codes the endpoint accepts; includes popular Indian, Asian, and global languages. */
 export const TRANSLATION_LANGUAGES = [
-  "en", "es", "fr", "de", "it", "pt", "ru", "tr", "ar", "hi",
-  "ur", "ja", "ko", "zh-CN", "id", "vi", "th", "pl", "nl", "sv",
+  "hi", // Hindi
+  "en", // English
+  "bn", // Bengali
+  "pa", // Punjabi
+  "mr", // Marathi
+  "gu", // Gujarati
+  "ta", // Tamil
+  "te", // Telugu
+  "kn", // Kannada
+  "ml", // Malayalam
+  "ur", // Urdu
+  "ne", // Nepali
+  "es", // Spanish
+  "fr", // French
+  "de", // German
+  "it", // Italian
+  "pt", // Portuguese
+  "ru", // Russian
+  "tr", // Turkish
+  "ar", // Arabic
+  "ja", // Japanese
+  "ko", // Korean
+  "zh-CN", // Chinese
+  "id", // Indonesian
+  "vi", // Vietnamese
+  "th", // Thai
+  "pl", // Polish
+  "nl", // Dutch
+  "sv", // Swedish
 ];
 
+const NATIVE_LANGUAGE_NAMES: Record<string, string> = {
+  hi: "Hindi (हिन्दी)",
+  en: "English",
+  bn: "Bengali (বাংলা)",
+  pa: "Punjabi (ਪੰਜਾਬੀ)",
+  mr: "Marathi (मराठी)",
+  gu: "Gujarati (ગુજરાતી)",
+  ta: "Tamil (தமிழ்)",
+  te: "Telugu (తెలుగు)",
+  kn: "Kannada (ಕನ್ನಡ)",
+  ml: "Malayalam (മലയാളം)",
+  ur: "Urdu (اردو)",
+  ne: "Nepali (नेपाली)",
+  es: "Spanish (Español)",
+  fr: "French (Français)",
+  de: "German (Deutsch)",
+  it: "Italian (Italiano)",
+  pt: "Portuguese (Português)",
+  ru: "Russian (Русский)",
+  tr: "Turkish (Türkçe)",
+  ar: "Arabic (العربية)",
+  ja: "Japanese (日本語)",
+  ko: "Korean (한국어)",
+  "zh-CN": "Chinese (中文)",
+  id: "Indonesian (Bahasa)",
+  vi: "Vietnamese (Tiếng Việt)",
+  th: "Thai (ไทย)",
+  pl: "Polish (Polski)",
+  nl: "Dutch (Nederlands)",
+  sv: "Swedish (Svenska)",
+};
+
 /**
- * Endonym-ish label via `Intl.DisplayNames` — already in the runtime, always in step with
- * the user's locale, and one less table to leave un-updated.
+ * Native label with English name for instant clarity across all locales.
  */
 export function getLanguageLabel(code: string): string {
+  if (NATIVE_LANGUAGE_NAMES[code]) return NATIVE_LANGUAGE_NAMES[code];
   try {
     return new Intl.DisplayNames(undefined, { type: "language" }).of(code) ?? code;
   } catch {

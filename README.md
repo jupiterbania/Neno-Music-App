@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/badge/version-v1.0.2-ff3d00?style=for-the-badge" alt="Version 1.0.2"></a>
+  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/badge/version-v1.0.3-ff3d00?style=for-the-badge" alt="Version 1.0.3"></a>
   <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/badge/platform-Android%20%7C%20iOS%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-4f46e5?style=for-the-badge" alt="Platforms"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-0ea5e9?style=for-the-badge" alt="License"></a>
   <a href="https://github.com/jupiterbania/Neno-Music-App/stargazers"><img src="https://img.shields.io/github/stars/jupiterbania/Neno-Music-App?style=for-the-badge&color=ff9700&label=stars" alt="Stars"></a>
