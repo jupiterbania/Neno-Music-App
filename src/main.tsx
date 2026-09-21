@@ -39,6 +39,8 @@ import { hydrateSessionRestoreSetting } from "./ui/settings/sessionRestore";
 import { hydrateToolbarItemSettings } from "./ui/settings/toolbarItems";
 import { hydrateHomeSectionSettings } from "./ui/settings/homeSections";
 import { applyRenderEffects, hydrateRenderEffects } from "./ui/settings/renderEffects";
+import { applyAdaptiveTheme, hydrateAdaptiveTheme } from "./ui/settings/adaptiveTheme";
+import { hydrateAutoDownloadLiked } from "./ui/settings/autoDownloadLiked";
 import { startMemoryReport } from "./internal/memoryReport";
 
 logInternalInfo("main.bootstrap start");
@@ -49,6 +51,7 @@ applyPlatformAttributes();
 void detectTilingWindowManager();
 // Before React mounts: a late theme apply shows a flash of the wrong palette.
 applyTheme();
+applyAdaptiveTheme();
 watchSystemTheme();
 applyPaperPcMode();
 applyRenderEffects();
@@ -63,6 +66,8 @@ void Promise.all([
   hydratePaperPcMode(),
   hydrateRenderEffects(),
   hydrateTheme(),
+  hydrateAdaptiveTheme(),
+  hydrateAutoDownloadLiked(),
   hydrateWindowControlSettings(),
   hydrateMediaSessionSettings(),
   hydrateMiniPlayerSettings(),

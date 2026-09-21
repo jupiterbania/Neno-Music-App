@@ -58,11 +58,9 @@ async function push(id: string | null): Promise<void> {
     return;
   }
 
-  if (!session?.currentTrack || session.status === "idle") return;
-  const wasPlaying = session.status === "playing";
+  if (!session?.currentTrack || session.status !== "playing") return;
   await playerController.playTrackById(session.currentTrack.id);
   if (session.positionSec > 0) await playerController.seekTo(session.positionSec);
-  if (!wasPlaying) await playerController.pause();
 }
 
 function subscribe(callback: () => void) {

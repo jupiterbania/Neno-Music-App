@@ -291,7 +291,7 @@ export function Layout({
               <div
                 ref={pageContentRef}
                 className={cn(
-                  "h-full overflow-y-auto overscroll-contain rounded-xl ",
+                  "h-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl",
                   fullBleedContent ? "p-0" : isMobile ? "px-2 pt-0 pb-32" : "p-4",
                 )}
                 data-page-scroll-root

@@ -72,7 +72,7 @@ export function MobileBottomNav({
     <nav
       aria-label="Mobile Navigation"
       className={cn(
-        "w-full flex items-center justify-around border-t border-white/10 bg-background/90 backdrop-blur-2xl px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom,0px),8px)] shadow-[0_-8px_24px_rgba(0,0,0,0.4)] select-none",
+        "w-full flex items-center justify-around border-t border-white/10 bg-background/98 backdrop-blur-md px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom,0px),8px)] shadow-[0_-8px_24px_rgba(0,0,0,0.4)] select-none",
         className,
       )}
     >

@@ -59,6 +59,8 @@
  */
 :root {
   --ambient-bloom: 1;
+  --ambient-artwork-color: var(--color-primary);
+  --ambient-artwork-glow: color-mix(in oklab, var(--color-primary) 35%, transparent);
 
   /*
    * The window's own edge. This window is transparent and its OS shadow is disabled, so a

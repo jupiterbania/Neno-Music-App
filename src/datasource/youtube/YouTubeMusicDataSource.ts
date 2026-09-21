@@ -626,7 +626,10 @@ export class YouTubeMusicDataSource extends DataSource {
           visitor_data: bootstrap.session.context.client.visitorData,
           client_type: ClientType.MUSIC,
         });
-      })();
+      })().catch((error) => {
+        this.downloadClientPromise = null;
+        throw error;
+      });
     }
 
     return this.downloadClientPromise;
@@ -737,6 +740,17 @@ export class YouTubeMusicDataSource extends DataSource {
    */
   private resetMusicClients(): void {
     this.accountCandidateCache = null;
+    this.musicClientPromise = null;
+    this.webClientPromise = null;
+    this.downloadClientPromise = null;
+  }
+
+  /**
+   * Drops all cached Innertube clients after network reconnection or idle suspension.
+   */
+  resetStaleClients(): void {
+    logInternalInfo("YouTubeMusicDataSource.resetStaleClients dropping cached clients");
+    this.downloadClientPromise = null;
     this.musicClientPromise = null;
     this.webClientPromise = null;
   }
@@ -2984,7 +2998,9 @@ export class YouTubeMusicDataSource extends DataSource {
        * Clients only — reading back a stored credential is the same person on the same channel.
        */
       this.resetMusicClients();
-      await this.getMusicClient();
+      void this.getMusicClient().catch((err) => {
+        logInternalWarn("YouTubeMusicDataSource.restoreSession client prewarm warning", { error: String(err) });
+      });
       logInternalInfo("YouTubeMusicDataSource.restoreSession success");
       return true;
     } catch (error) {
@@ -5586,28 +5602,39 @@ export class YouTubeMusicDataSource extends DataSource {
   async getRecommendations(
     seed: Track,
     onUpdate?: (tracks: Track[]) => void,
+    forceRefresh = false,
   ): Promise<Track[]> {
     const cacheKey = `youtube-music:recommendations:v1:${seed.id}`;
-    const cached = await getCachedJson<Track[]>(cacheKey);
 
-    if (cached) {
-      globalThis.setTimeout(() => {
-        void this.refreshRecommendations(seed, cacheKey)
-          .then(({ changed, value }) => {
-            if (changed) onUpdate?.(value);
-          })
-          .catch((error) => {
-            logInternalWarn("YouTubeMusicDataSource.getRecommendations background refresh failed", {
-              seedTrackId: seed.id,
-              error: error instanceof Error ? error.message : String(error),
+    /*
+     * When `forceRefresh` is true (e.g. user explicitly clicked a song to play it), we skip
+     * the cache read entirely and immediately fetch a fresh "Up Next" queue from YouTube Music.
+     * This ensures the queue behind the playing song always matches what YouTube Music would
+     * show right now for that specific track, rather than a potentially stale cached list.
+     */
+    if (!forceRefresh) {
+      const cached = await getCachedJson<Track[]>(cacheKey);
+
+      if (cached) {
+        globalThis.setTimeout(() => {
+          void this.refreshRecommendations(seed, cacheKey)
+            .then(({ changed, value }) => {
+              if (changed) onUpdate?.(value);
+            })
+            .catch((error) => {
+              logInternalWarn("YouTubeMusicDataSource.getRecommendations background refresh failed", {
+                seedTrackId: seed.id,
+                error: error instanceof Error ? error.message : String(error),
+              });
             });
-          });
-      }, 0);
-      return cached;
+        }, 0);
+        return cached;
+      }
     }
 
     try {
-      return (await this.refreshRecommendations(seed, cacheKey)).value;
+      const result = await this.refreshRecommendations(seed, cacheKey);
+      return result.value;
     } catch {
       return [];
     }
@@ -5639,34 +5666,53 @@ export class YouTubeMusicDataSource extends DataSource {
       const client = await this.getMusicClient();
       const panel = await client.music.getUpNext(seed.id, true);
       const recommendationTracks: Track[] = [];
-      for (const entry of panel.contents) {
+      const contents = (panel as any)?.contents ?? (panel as any)?.items ?? [];
+      for (const entry of contents) {
         const item = entry as unknown as UpNextItem;
-        const video = item.primary ?? item;
-        const id = video.video_id;
-        const title = video.title?.toString();
+        const video = (item as any)?.primary ?? item;
+        const id = video.video_id
+          ?? (video as any)?.videoId
+          ?? (video as any)?.id
+          ?? (video as any)?.endpoint?.payload?.videoId;
+        const title = video.title?.toString?.()
+          || (video as any)?.title?.text
+          || (typeof (video as any)?.title === "string" ? (video as any)?.title : undefined);
         if (!id || !title || id === seed.id) continue;
 
         recommendationTracks.push({
           id,
           source: "youtube",
           title,
-          artist: video.artists?.map((artist) => artist.name).filter(Boolean).join(", ")
+          artist: (video.artists as any[])?.map((artist: any) => artist.name).filter(Boolean).join(", ")
             || video.author
+            || (video as any)?.subtitle?.toString?.()
             || "Unknown artist",
-          artists: video.artists
-            ?.map((artist) => ({
+          artists: (video.artists as any[])
+            ?.map((artist: any) => ({
               id: artist.channel_id
                 ?? this.findBrowseId(artist.endpoint)
                 ?? this.findBrowseId(artist.navigationEndpoint)
                 ?? "",
               name: artist.name ?? "",
             }))
-            .filter((artist) => artist.name),
+            .filter((artist: any) => artist.name),
           durationSec: video.duration?.seconds,
-          artworkUrl: selectArtworkUrl(video.thumbnail) ?? getVideoArtworkFallback(id),
+          artworkUrl: selectArtworkUrl(video.thumbnail ?? (video as any)?.thumbnails) ?? getVideoArtworkFallback(id),
         });
       }
-      const tracks = this.uniqueById(recommendationTracks);
+      let tracks = this.uniqueById(recommendationTracks);
+
+      if (tracks.length === 0) {
+        // Fallback: fetch related tracks from YouTube Music
+        const related = await this.getRelated(seed);
+        const relatedTracks: Track[] = [];
+        for (const shelf of related) {
+          for (const t of shelf.tracks) {
+            if (t.id !== seed.id) relatedTracks.push(t);
+          }
+        }
+        tracks = this.uniqueById(relatedTracks);
+      }
 
       logInternalInfo("YouTubeMusicDataSource.getRecommendations success", {
         seedTrackId: seed.id,
@@ -5677,6 +5723,26 @@ export class YouTubeMusicDataSource extends DataSource {
       logInternalError("YouTubeMusicDataSource.getRecommendations failed", error, {
         seedTrackId: seed.id,
       });
+      // Fallback on error: try getRelated
+      try {
+        const related = await this.getRelated(seed);
+        const relatedTracks: Track[] = [];
+        for (const shelf of related) {
+          for (const t of shelf.tracks) {
+            if (t.id !== seed.id) relatedTracks.push(t);
+          }
+        }
+        const fallbackTracks = this.uniqueById(relatedTracks);
+        if (fallbackTracks.length > 0) {
+          logInternalInfo("YouTubeMusicDataSource.getRecommendations recovered via getRelated", {
+            seedTrackId: seed.id,
+            trackCount: fallbackTracks.length,
+          });
+          return fallbackTracks;
+        }
+      } catch {
+        // Ignore fallback error
+      }
       throw new Error("Unable to load recommendations.");
     }
   }
@@ -5825,6 +5891,13 @@ export class YouTubeMusicDataSource extends DataSource {
           });
           break;
         } catch (error) {
+          if (label === "download") {
+            this.downloadClientPromise = null;
+          } else if (label === "music") {
+            this.musicClientPromise = null;
+          } else if (label === "web") {
+            this.webClientPromise = null;
+          }
           logInternalWarn("YouTubeMusicDataSource.getStreamData client failed", {
             trackId: track.id,
             client: label,

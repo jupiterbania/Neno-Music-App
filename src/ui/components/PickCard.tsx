@@ -4,7 +4,7 @@ import { PlayActiveIcon } from "@/ui/icons";
 import { TrackArtwork } from "./TrackArtwork";
 
 /** Movement past this many px means the gesture was a carousel drag, not a tap. */
-const TAP_SLOP_PX = 5;
+const TAP_SLOP_PX = 16;
 
 /**
  * Resting card width — `PICKS_ITEM_SIZE` (250) × `PICKS_ASPECT` (3/4) in HomePage, rounded up
@@ -50,13 +50,13 @@ export function PickCardInner({
   onWarm,
 }: PickCardProps) {
   const tapRef = useRef<{ x: number; y: number } | null>(null);
+  const firedTapRef = useRef(false);
 
   /*
    * The carousel captures the pointer on its stage and preventDefault()s every pointerdown,
-   * so a normal `click` on a card never fires — it is retargeted to the stage. Tap detection
-   * therefore happens here: record where the press started, then decide on the pointerup
-   * (listened for on window, since the captured pointer no longer reports to this element)
-   * whether the gesture was a tap or a drag.
+   * so a normal `click` on a card never fires inside CylinderCarousel — it is retargeted to the stage.
+   * Tap detection therefore happens here for the carousel, while standard `onClick` handles
+   * normal mobile touch and standard grid/list taps.
    */
   useEffect(() => {
     if (disabled) return;
@@ -67,7 +67,13 @@ export function PickCardInner({
       if (!start || event.button !== 0) return;
 
       const travelled = Math.hypot(event.clientX - start.x, event.clientY - start.y);
-      if (travelled <= TAP_SLOP_PX) onSelect?.();
+      if (travelled <= TAP_SLOP_PX) {
+        firedTapRef.current = true;
+        onSelect?.();
+        window.setTimeout(() => {
+          firedTapRef.current = false;
+        }, 300);
+      }
     };
     const handleCancel = () => {
       tapRef.current = null;
@@ -80,6 +86,15 @@ export function PickCardInner({
       window.removeEventListener("pointercancel", handleCancel);
     };
   }, [disabled, onSelect]);
+
+  const handleClick = () => {
+    if (disabled) return;
+    if (firedTapRef.current) {
+      firedTapRef.current = false;
+      return;
+    }
+    onSelect?.();
+  };
 
   return (
     <div
@@ -102,11 +117,7 @@ export function PickCardInner({
         if (disabled || event.button !== 0) return;
         tapRef.current = { x: event.clientX, y: event.clientY };
       }}
-      // Keyboard-generated clicks report detail 0; mouse taps are handled above, so this
-      // stays the Enter/Space path only and cannot double-fire.
-      onClick={(event) => {
-        if (!disabled && event.detail === 0) onSelect?.();
-      }}
+      onClick={handleClick}
       onKeyDown={(event) => {
         if (disabled) return;
         if (event.key === "Enter" || event.key === " ") {

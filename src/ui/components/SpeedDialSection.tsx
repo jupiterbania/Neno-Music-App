@@ -66,7 +66,7 @@ export function SpeedDialSection({
   };
 
   const playTrack = (track: Track) => {
-    void playerController.playTrackById(track.id, speedDialTracks, true);
+    void playerController.playTrackById(track.id);
   };
 
   if (!isLoading && speedDialTracks.length === 0) {

@@ -35,7 +35,9 @@ interface AndroidMediaBridgeInterface {
     artworkUrl?: string | null,
     durationSec?: number,
     positionSec?: number,
+    playbackState?: string,
   ): void;
+  syncPosition?(positionSec: number): void;
   stopMedia(): void;
 }
 
@@ -73,6 +75,7 @@ async function sendServiceAction(
           payload?.artworkUrl ? String(payload.artworkUrl) : null,
           Math.round(Number(payload?.durationSec ?? 0)),
           Math.round(Number(payload?.positionSec ?? 0)),
+          String(payload?.playbackState ?? (payload?.isPlaying ? "playing" : "paused")),
         );
         return;
       }
@@ -102,6 +105,7 @@ async function updateService(
   artworkUrl?: string | null,
   durationSec?: number,
   positionSec?: number,
+  playbackState?: string,
 ): Promise<void> {
   if (!isAndroidEnvironment()) return;
   await sendServiceAction(ACTION_UPDATE, {
@@ -111,12 +115,25 @@ async function updateService(
     artworkUrl: artworkUrl ?? null,
     durationSec: durationSec ?? 0,
     positionSec: positionSec ?? 0,
+    playbackState: playbackState ?? (isPlaying ? "playing" : "paused"),
   });
 }
 
 async function stopService(): Promise<void> {
   if (!isAndroidEnvironment()) return;
   await sendServiceAction(ACTION_STOP);
+}
+
+function syncServicePosition(positionSec: number): void {
+  if (!isAndroidEnvironment()) return;
+  const bridge = getAndroidBridge();
+  if (bridge?.syncPosition) {
+    try {
+      bridge.syncPosition(Math.round(positionSec));
+    } catch (e) {
+      console.warn("[androidMediaBridge] syncPosition error:", e);
+    }
+  }
 }
 
 /**
@@ -146,8 +163,7 @@ export function useAndroidMediaBridge(): void {
       return;
     }
 
-    // Keep service informed of active playback even during loading transitions
-    const isPlaying = status === "playing" || status === "loading";
+    const isPlaying = status === "playing";
     const duration = Math.round(playerController.getDuration() || currentTrack.durationSec || 0);
     const position = Math.round(playerController.getCurrentTime() || 0);
     const hdArtworkUrl = currentTrack.artworkUrl
@@ -161,6 +177,7 @@ export function useAndroidMediaBridge(): void {
       hdArtworkUrl,
       duration,
       position,
+      status, // "playing" | "paused" | "loading" | "idle"
     );
   }, [state.currentTrack, state.status]);
 
@@ -170,40 +187,16 @@ export function useAndroidMediaBridge(): void {
 
     // Immediate first tick so the notification seekbar does not lag on track start.
     const firstTickId = window.setTimeout(() => {
-      const track = stateRef.current.currentTrack;
-      if (!track) return;
-      const duration = Math.round(playerController.getDuration() || track.durationSec || 0);
       const position = Math.round(playerController.getCurrentTime() || 0);
-      const hdArtworkUrl = track.artworkUrl
-        ? (getArtworkUrlCandidates(track.artworkUrl, 1200)[0] ?? track.artworkUrl)
-        : null;
-      void updateService(
-        track.title ?? "Unknown Track",
-        track.artist ?? "Unknown Artist",
-        true,
-        hdArtworkUrl,
-        duration,
-        position,
-      );
+      syncServicePosition(position);
     }, 500);
 
+    // 5-second interval: Android MediaSession automatically interpolates seekbar
+    // progress in SystemUI, so frequent 1s updates are unnecessary and drain battery.
     const interval = window.setInterval(() => {
-      const track = stateRef.current.currentTrack;
-      if (!track) return;
-      const duration = Math.round(playerController.getDuration() || track.durationSec || 0);
       const position = Math.round(playerController.getCurrentTime() || 0);
-      const hdArtworkUrl = track.artworkUrl
-        ? (getArtworkUrlCandidates(track.artworkUrl, 1200)[0] ?? track.artworkUrl)
-        : null;
-      void updateService(
-        track.title ?? "Unknown Track",
-        track.artist ?? "Unknown Artist",
-        true,
-        hdArtworkUrl,
-        duration,
-        position,
-      );
-    }, 1000);
+      syncServicePosition(position);
+    }, 5000);
 
     return () => {
       window.clearTimeout(firstTickId);
@@ -220,6 +213,7 @@ export function useAndroidMediaBridge(): void {
         const sec = parseFloat(command.substring(7));
         if (!isNaN(sec)) {
           void playerController.seekTo(sec);
+          syncServicePosition(sec);
         }
         return;
       }

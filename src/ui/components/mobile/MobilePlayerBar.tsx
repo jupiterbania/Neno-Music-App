@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo, useMemo } from "react";
+import { useEffect, useRef, memo, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import {
@@ -24,30 +24,43 @@ interface MobilePlayerBarProps {
 }
 
 // Lightweight isolated progress bar to prevent re-rendering the entire player bar on timer ticks
-const MiniPlayerProgress = memo(function MiniPlayerProgress({ trackId }: { trackId?: string }) {
-  const [percent, setPercent] = useState(0);
+const MiniPlayerProgress = memo(function MiniPlayerProgress({
+  trackId,
+  isPlaying,
+}: {
+  trackId?: string;
+  isPlaying: boolean;
+}) {
+  const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!trackId) {
-      setPercent(0);
+      if (progressRef.current) progressRef.current.style.width = "0%";
       return;
     }
-    const interval = setInterval(() => {
+
+    const update = () => {
       const dur = playerController.getDuration();
       const curr = playerController.getCurrentTime();
-      if (dur > 0) {
-        setPercent(Math.min(100, Math.max(0, (curr / dur) * 100)));
+      if (dur > 0 && progressRef.current) {
+        const pct = Math.min(100, Math.max(0, (curr / dur) * 100));
+        progressRef.current.style.width = `${pct}%`;
       }
-    }, 300);
+    };
 
+    update();
+    if (!isPlaying) return;
+
+    const interval = setInterval(update, 500);
     return () => clearInterval(interval);
-  }, [trackId]);
+  }, [trackId, isPlaying]);
 
   return (
     <div className="h-[2.5px] w-full bg-white/10 overflow-hidden rounded-t-2xl">
       <div
-        className="h-full bg-gradient-to-r from-red-500 to-rose-400 transition-all duration-300 ease-out"
-        style={{ width: `${percent}%` }}
+        ref={progressRef}
+        className="h-full bg-gradient-to-r from-red-500 to-rose-400 transition-[width] duration-500 ease-linear"
+        style={{ width: "0%" }}
       />
     </div>
   );
@@ -144,7 +157,7 @@ export function MobilePlayerBarInner({ onOpenNowPlaying, className }: MobilePlay
         )}
       >
         {/* Top Progress Line */}
-        <MiniPlayerProgress trackId={currentTrack.id} />
+        <MiniPlayerProgress trackId={currentTrack.id} isPlaying={isPlaying} />
 
         {/* Structured Content Row */}
         <div className="flex items-center gap-3 px-3 py-2">

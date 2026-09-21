@@ -182,7 +182,7 @@ export class PlayerController {
   private loadedTrackId: string | null = null;
   private isTabActive = true;
   private playTrackRequestId = 0;
-  private autoplayEnabled = false;
+  private autoplayEnabled = true;
   private handlingTrackEnd = false;
   /** The track already reloaded once after ending early, so a second failure gives up. */
   private prematureEndTrackId: string | null = null;
@@ -366,9 +366,11 @@ export class PlayerController {
       this.setState({
         currentTrack: track,
         history: this.appendHistory(track),
-        status: "paused",
+        status: "loading",
         error: null,
       });
+      await this.ensureTrackLoaded(track);
+      this.setState({ status: "paused", error: null });
       logInternalInfo("PlayerController.loadTrack success", {
         trackId: track.id,
         title: track.title,
@@ -381,7 +383,7 @@ export class PlayerController {
   async playTrackById(
     videoId: string,
     playbackQueue?: readonly Track[],
-    autoplayWhenQueueEnds = false,
+    autoplayWhenQueueEnds = true,
     shufflePlaylist = false,
   ): Promise<boolean> {
     // Close out whatever was playing first: this is the funnel every track change goes
@@ -470,6 +472,14 @@ export class PlayerController {
       }
       if (requestId !== this.playTrackRequestId) return false;
 
+      // When a single track is explicitly played without a queue (e.g. clicking a card in Speed Dial,
+      // Search results, Home picks), seed a new queue with this track so upcoming recommendations match it.
+      if (!playbackQueue?.length && this.queue.current?.id !== track.id) {
+        this.isPlaylistMode = false;
+        this.autoplayEnabled = true;
+        this.queue.set([track], 0);
+      }
+
       this.loadedTrackId = null;
       this.setState({
         currentTrack: track,
@@ -479,8 +489,13 @@ export class PlayerController {
         playbackOrderMode: this.playbackOrderMode,
         shuffleEnabled: this.shuffleEnabled,
       });
-      if (autoplayWhenQueueEnds && playbackQueue?.length === 1) {
-        void this.primeRadioQueue(track, requestId);
+      if (this.autoplayEnabled && !this.isPlaylistMode) {
+        /*
+         * forceRefresh=true: the user explicitly chose this track, so the radio queue behind
+         * it must always be seeded from a fresh YouTube Music API call — not a cached list
+         * that might have been stored days ago or built for a different playback context.
+         */
+        this.refillAutomaticQueue(true);
       }
       await this.ensureTrackLoaded(track);
       if (requestId !== this.playTrackRequestId) return false;
@@ -849,11 +864,11 @@ export class PlayerController {
       nextTrackId: nextTrack?.id ?? null,
     });
     if (!nextTrack || nextTrack.id === this.state.currentTrack?.id) return;
-    this.refillAutomaticQueue();
     if (shouldResume) {
       await this.playTrackById(nextTrack.id);
     } else {
       await this.loadTrack(nextTrack);
+      this.refillAutomaticQueue();
     }
   }
 
@@ -955,37 +970,11 @@ export class PlayerController {
     if (!usesRustAudioEngine()) return;
 
     logInternalInfo("PlayerController.handleAudioOutputDeviceChanged refreshing audio output route");
-    const track = this.state.currentTrack;
-    const wasPlaying = this.state.status === "playing";
-    const position = this.getCurrentTime() || 0;
 
     try {
       await setOutputDevice(null);
     } catch (error) {
       logInternalWarn("PlayerController.handleAudioOutputDeviceChanged setOutputDevice failed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-
-    if (!track || this.state.status === "idle") return;
-
-    this.loadedTrackId = null;
-    this.discardWarmedStream(track.id);
-
-    try {
-      if (wasPlaying) {
-        await this.playTrackById(track.id);
-        if (position > 0 && this.loadedTrackId === track.id) {
-          await this.seekTo(position);
-        }
-      } else {
-        await this.loadTrack(track);
-        if (position > 0) {
-          this.pendingSeekTime = position;
-        }
-      }
-    } catch (error) {
-      logInternalWarn("PlayerController.handleAudioOutputDeviceChanged track reload failed", {
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -1034,7 +1023,6 @@ export class PlayerController {
       const nextTrack = this.queue.next(false);
 
       if (nextTrack && nextTrack.id !== this.state.currentTrack?.id) {
-        this.refillAutomaticQueue();
         await this.playTrackById(nextTrack.id);
         return;
       }
@@ -1077,7 +1065,7 @@ export class PlayerController {
         }
       }
 
-      if (!this.autoplayEnabled || !seed || !this.dataSource.getRecommendations) {
+      if (!seed || !this.dataSource.getRecommendations) {
         this.setState({ status: "paused" });
         return;
       }
@@ -1097,15 +1085,23 @@ export class PlayerController {
     }
   }
 
-  private refillAutomaticQueue(): void {
-    if (this.queue.remainingAutomatic >= 10) return;
+  /**
+   * Tops up the automatic (radio) portion of the queue when it runs low.
+   *
+   * `forceRefresh` is passed through to `primeRadioQueue` and ultimately to the data source.
+   * It should be `true` whenever the user has explicitly selected a track to play, so the
+   * very first batch of recommendations always comes from a fresh YouTube Music API call
+   * rather than a stale cache from a previous session.
+   */
+  private refillAutomaticQueue(forceRefresh = false): void {
+    if (!forceRefresh && this.queue.remainingAutomatic >= 10) return;
 
     if (this.isPlaylistMode) {
       return;
     }
 
     if (this.autoplayEnabled && this.state.currentTrack) {
-      void this.primeRadioQueue(this.state.currentTrack, this.playTrackRequestId);
+      void this.primeRadioQueue(this.state.currentTrack, this.playTrackRequestId, forceRefresh);
     }
   }
 
@@ -1136,25 +1132,33 @@ export class PlayerController {
     return recommendations[0];
   }
 
-  private async getVariedRecommendations(seed: Track): Promise<Track[]> {
-    const recommendations = await this.dataSource.getRecommendations?.(seed) ?? [];
+  /**
+   * Fetches YouTube Music "Up Next" recommendations for `seed`.
+   *
+   * `forceRefresh` is forwarded to the data source: when `true`, the cache is bypassed and a
+   * fresh network request is made. Pass it as `true` whenever the user has explicitly chosen
+   * to play a particular track, so the radio queue behind it always reflects YouTube Music's
+   * current algorithmic suggestion for that track.
+   */
+  private async getVariedRecommendations(seed: Track, forceRefresh = false): Promise<Track[]> {
+    const recommendations = await this.dataSource.getRecommendations?.(seed, undefined, forceRefresh) ?? [];
     if (recommendations.length === 0) return [];
-
-    // Filter out recently played tracks if enough alternatives exist, while preserving
-    // YouTube Music's exact algorithmic "Up Next" order.
-    const recentlyPlayed = new Set(this.state.history.slice(-10).map((track) => track.id));
-    const fresh = recommendations.filter((track) => !recentlyPlayed.has(track.id));
-    const candidates = fresh.length >= 5 ? fresh : recommendations;
-
-    const selected = candidates.slice(0, 35);
-    return selected;
+    // Preserve YouTube Music's exact algorithmic "Up Next" / Radio queue order
+    return recommendations.slice(0, 50);
   }
 
-  private async primeRadioQueue(seed: Track, playRequestId: number): Promise<void> {
+  /**
+   * Fetches recommendations for `seed` and fills the automatic (radio) portion of the queue.
+   *
+   * `forceRefresh` is forwarded through to the data source so that an explicit user-initiated
+   * play always fetches fresh "Up Next" data from YouTube Music rather than serving a cached
+   * list that may belong to an earlier session or a different device state.
+   */
+  private async primeRadioQueue(seed: Track, playRequestId: number, forceRefresh = false): Promise<void> {
     const requestId = ++this.radioQueueRequestId;
     let recommendations: Track[];
     try {
-      recommendations = await this.getVariedRecommendations(seed);
+      recommendations = await this.getVariedRecommendations(seed, forceRefresh);
     } catch (error) {
       logInternalWarn("PlayerController.primeRadioQueue failed", {
         seedTrackId: seed.id,
@@ -1172,6 +1176,11 @@ export class PlayerController {
     }
 
     this.queue.replaceAutomaticUpcoming(recommendations);
+    logInternalInfo("PlayerController.primeRadioQueue success", {
+      seedTrackId: seed.id,
+      trackCount: recommendations.length,
+      forceRefresh,
+    });
     this.emit();
   }
 
@@ -1943,7 +1952,16 @@ export class PlayerController {
   }
 
   private shouldResumeAfterNavigation(): boolean {
-    return this.state.status === "playing" || this.state.status === "loading";
+    /*
+     * Always resume (play) after navigation, regardless of whether the player was previously
+     * playing, loading, or paused.
+     *
+     * Previously this returned false when status was "paused", which caused skipToNext/Previous
+     * to call loadTrack() instead of playTrackById() — so clicking the next song card would
+     * load the track in a paused state rather than actually playing it. The user had to then
+     * manually press the play button.
+     */
+    return this.state.status !== "idle" || Boolean(this.state.currentTrack);
   }
 
   private cancelLoadingPlayback(): void {

@@ -314,7 +314,7 @@ export function TrackContextMenuProvider({
   const startRadio = () => {
     if (!track) return;
     setMenuPosition(null);
-    void playerController.playTrackById(track.id, [track], true);
+    void playerController.playTrackById(track.id);
   };
 
   const handleShare = async () => {

@@ -54,7 +54,7 @@ export function SpeedDialPage({
   };
 
   const playTrack = (track: Track) => {
-    void playerController.playTrackById(track.id, tracks, true);
+    void playerController.playTrackById(track.id);
   };
 
   return (

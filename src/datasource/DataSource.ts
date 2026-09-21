@@ -168,7 +168,15 @@ export abstract class DataSource {
   setTrackLiked?(track: Track, liked: boolean): Promise<void>;
   /** Three-valued rating. Sources that only support liking may implement setTrackLiked alone. */
   setTrackRating?(track: Track, rating: TrackRating): Promise<void>;
-  getRecommendations?(seed: Track, onUpdate?: (tracks: Track[]) => void): Promise<Track[]>;
+  /**
+   * Fetches tracks recommended after `seed` — YouTube Music's "Up Next" / radio queue.
+   *
+   * `forceRefresh` bypasses the local cache and always fetches from the network. Pass `true`
+   * when the user explicitly starts playing a new song, so the queue behind it reflects
+   * YouTube Music's current recommendation for that exact track rather than a stale snapshot
+   * from a previous session.
+   */
+  getRecommendations?(seed: Track, onUpdate?: (tracks: Track[]) => void, forceRefresh?: boolean): Promise<Track[]>;
   /** Discovery shelves for a track: similar artists, related playlists, more from the album. */
   getRelated?(track: Track): Promise<BrowseShelf[]>;
   getBrowsePage?(target: BrowseTarget): Promise<BrowsePage>;

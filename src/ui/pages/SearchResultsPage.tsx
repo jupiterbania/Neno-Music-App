@@ -205,9 +205,9 @@ export function SearchResultsPage({
   const playTrack = useCallback(
     (track: Track) => {
       if (onPlayTrack) void onPlayTrack(track);
-      else void playerController.playTrackById(track.id, scopedResults.tracks, true);
+      else void playerController.playTrackById(track.id);
     },
-    [onPlayTrack, playerController, scopedResults.tracks],
+    [onPlayTrack, playerController],
   );
 
   const playAllSongs = useCallback(() => {
@@ -284,11 +284,7 @@ export function SearchResultsPage({
             if (onPlayTrackRef.current) {
               void onPlayTrackRef.current(track);
             } else {
-              void playerControllerRef.current.playTrackById(
-                track.id,
-                resultsRef.current.tracks,
-                true,
-              );
+              void playerControllerRef.current.playTrackById(track.id);
             }
             break;
           }

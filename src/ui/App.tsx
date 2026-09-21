@@ -51,6 +51,7 @@ import { QueuePanel } from "./components/player/QueuePanel";
 import { useQueuePanelCollapsed } from "./settings/queuePanel";
 import { useNativeWindowControls } from "./settings/windowControls";
 import { useIsMobile } from "./hooks/useIsMobile";
+import { useDynamicArtworkTheme } from "./styles/artworkColor";
 import { MobileBottomNav } from "./components/mobile/MobileBottomNav";
 import { MobilePlayerBar } from "./components/mobile/MobilePlayerBar";
 import { MobileNowPlayingModal } from "./components/mobile/MobileNowPlayingModal";
@@ -60,6 +61,7 @@ const COLLAPSED_QUEUE_WIDTH = 62;
 import { Layout } from "./components/Layout";
 import type { Tab, TabViewState } from "./types/tab";
 import {
+  dataSource,
   libraryController,
   playerController,
   searchController,
@@ -72,6 +74,7 @@ import {
 import { clearAppSession, loadAppSession, saveAppSession } from "../player/appSession";
 import { useMediaSession } from "../player/useMediaSession";
 import { useAndroidMediaBridge } from "../player/androidMediaBridge";
+import { useAudioKeepalive } from "../player/audioKeepalive";
 import { playerUIStore, usePlayerUIState } from "./stores/playerUIStore";
 import { AppLoadingScreen } from "./components/AppLoadingScreen";
 import { AuthOverlay } from "./components/AuthOverlay";
@@ -323,6 +326,10 @@ export default function App() {
   const [isMobileNowPlayingOpen, setIsMobileNowPlayingOpen] = useState(false);
   // Sync player state to Android MediaPlaybackService (no-op on desktop/iOS)
   useAndroidMediaBridge();
+  // Keep the WebView active during background playback to prevent OS timer suspension
+  useAudioKeepalive();
+  // Extract and apply ambient glowing accent colors from current track artwork
+  useDynamicArtworkTheme(playerState.currentTrack?.artworkUrl);
 
   // The window is transparent so the app root can round its own corners. When the window
   // is maximised or fullscreen those corners would expose the desktop, so drop the radius.
@@ -662,7 +669,6 @@ export default function App() {
   );
 
   useMediaSession(playerState, playerController);
-  useAndroidMediaBridge();
 
   useEffect(() => {
     let cancelled = false;
@@ -842,6 +848,8 @@ export default function App() {
     const resetSleepTimerOnVisible = () => {
       if (document.visibilityState === "visible") {
         sleepRecoveryLastTickRef.current = Date.now();
+        (dataSource as { resetStaleClients?: () => void }).resetStaleClients?.();
+        (dataSource as { warmPlayback?: () => void }).warmPlayback?.();
       }
     };
     document.addEventListener("visibilitychange", resetSleepTimerOnVisible);
@@ -1402,7 +1410,7 @@ export default function App() {
   const handlePlaySearchTrack = async (track: Track) => {
     const stepAtStart = onboardingStep;
     const tabAtStart = activeTabId;
-    const started = await playerController.playTrackById(track.id, [track], true);
+    const started = await playerController.playTrackById(track.id);
     if (!started) return;
 
     if (
@@ -1424,7 +1432,7 @@ export default function App() {
   const handlePlaySearchResult = async (track: Track) => {
     const stepAtStart = onboardingStep;
     const tabAtStart = activeTabId;
-    const started = await playerController.playTrackById(track.id, [track], true);
+    const started = await playerController.playTrackById(track.id);
     if (!started) return;
 
     if (stepAtStart === "play-first" && tabAtStart === onboardingFirstTabId) {

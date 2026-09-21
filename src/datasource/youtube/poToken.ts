@@ -179,11 +179,18 @@ export async function mintPoToken(contentBinding: string): Promise<string | unde
   if (!contentBinding) return undefined;
 
   try {
-    let entry = await getMinter();
-    if (Date.now() >= entry.expiresAt) {
-      cached = null;
-      entry = await getMinter();
-    }
+    const entryPromise = (async () => {
+      let entry = await getMinter();
+      if (Date.now() >= entry.expiresAt) {
+        cached = null;
+        entry = await getMinter();
+      }
+      return entry;
+    })();
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("PO token attestation timed out")), 6000),
+    );
+    const entry = await Promise.race([entryPromise, timeoutPromise]);
     return await entry.minter.mintAsWebsafeString(contentBinding);
   } catch (error) {
     logInternalWarn("poToken.mint failed, continuing without one", {

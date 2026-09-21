@@ -27,6 +27,22 @@ class MainActivity : TauriActivity() {
         @JvmStatic
         var instance: MainActivity? = null
             private set
+
+        init {
+            try {
+                val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+                Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+                    try {
+                        android.util.Log.e("NenoCrash", "Fatal exception on thread ${thread.name}: ${throwable.message}", throwable)
+                        instance?.let { act ->
+                            val logFile = java.io.File(act.filesDir, "last_crash.log")
+                            logFile.writeText("Time: ${System.currentTimeMillis()}\nThread: ${thread.name}\n${throwable.stackTraceToString()}\n")
+                        }
+                    } catch (_: Throwable) {}
+                    previousHandler?.uncaughtException(thread, throwable)
+                }
+            } catch (_: Throwable) {}
+        }
     }
 
     var targetWebView: WebView? = null
@@ -42,7 +58,7 @@ class MainActivity : TauriActivity() {
      * prevent the JS player from advancing the queue until the app is re-opened,
      * producing the symptom where the next song only starts on app open.
      *
-     * Posting a no-op eval every 500 ms keeps the WebView message loop active and
+     * Posting a no-op eval every 3500 ms keeps the WebView message loop active and
      * ensures any Tauri events queued by Rust are processed promptly in background.
      */
     private val backgroundKeepaliveHandler = Handler(Looper.getMainLooper())
@@ -52,7 +68,7 @@ class MainActivity : TauriActivity() {
                 wv.resumeTimers()
                 wv.evaluateJavascript("void 0;", null)
             }
-            backgroundKeepaliveHandler.postDelayed(this, 750)
+            backgroundKeepaliveHandler.postDelayed(this, 3500)
         }
     }
     private var backgroundKeepaliveActive = false
@@ -73,7 +89,9 @@ class MainActivity : TauriActivity() {
     private external fun initAndroidContext(context: android.content.Context)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        try {
+            enableEdgeToEdge()
+        } catch (_: Throwable) {}
         super.onCreate(savedInstanceState)
         instance = this
 
@@ -83,35 +101,42 @@ class MainActivity : TauriActivity() {
             e.printStackTrace()
         }
 
-        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                val webView = targetWebView
-                if (webView != null) {
-                    webView.evaluateJavascript(
-                        "(function() { if (typeof window.__neno_handle_android_back === 'function') { return window.__neno_handle_android_back(); } if (typeof window.__zuno_handle_android_back === 'function') { return window.__zuno_handle_android_back(); } return false; })()"
-                    ) { result ->
-                        if (result != "true") {
-                            moveTaskToBack(true)
+        try {
+            onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    val webView = targetWebView
+                    if (webView != null) {
+                        webView.evaluateJavascript(
+                            "(function() { if (typeof window.__neno_handle_android_back === 'function') { return window.__neno_handle_android_back(); } if (typeof window.__zuno_handle_android_back === 'function') { return window.__zuno_handle_android_back(); } return false; })()"
+                        ) { result ->
+                            if (result != "true") {
+                                moveTaskToBack(true)
+                            }
                         }
+                    } else {
+                        moveTaskToBack(true)
                     }
-                } else {
-                    moveTaskToBack(true)
+                }
+            })
+        } catch (_: Throwable) {}
+
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
                 }
             }
-        })
+        } catch (_: Throwable) {}
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+        try {
+            registerMediaControlReceiver()
+        } catch (_: Throwable) {}
+
+        try {
+            window.decorView.post {
+                setupWebView()
             }
-        }
-
-        registerMediaControlReceiver()
-        registerAudioRouteMonitoring()
-
-        window.decorView.post {
-            setupWebView()
-        }
+        } catch (_: Throwable) {}
     }
 
     override fun onWebViewCreate(webView: WebView) {
@@ -222,32 +247,44 @@ class MainActivity : TauriActivity() {
 
     fun dispatchMediaControl(command: String) {
         runOnUiThread {
-            targetWebView?.evaluateJavascript(
-                "if (window.__neno_media_command) { window.__neno_media_command('$command'); } else if (window.__zuno_media_command) { window.__zuno_media_command('$command'); } else { window.dispatchEvent(new CustomEvent('com.neno.desktop.MEDIA_CONTROL', { detail: { command: '$command' } })); }",
-                null
-            )
+            val wv = targetWebView ?: findWebView(window.decorView)
+            wv?.let {
+                try {
+                    it.resumeTimers()
+                    it.evaluateJavascript(
+                        "if (window.__neno_media_command) { window.__neno_media_command('$command'); } else if (window.__zuno_media_command) { window.__zuno_media_command('$command'); } else { window.dispatchEvent(new CustomEvent('com.neno.desktop.MEDIA_CONTROL', { detail: { command: '$command' } })); }",
+                        null
+                    )
+                } catch (e: Throwable) {
+                    e.printStackTrace()
+                }
+            }
         }
     }
 
     private var mediaControlReceiver: android.content.BroadcastReceiver? = null
 
     private fun registerMediaControlReceiver() {
-        mediaControlReceiver = object : android.content.BroadcastReceiver() {
-            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-                val command = intent?.getStringExtra("command")
-                if (!command.isNullOrBlank()) {
-                    dispatchMediaControl(command)
+        try {
+            mediaControlReceiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                    val command = intent?.getStringExtra("command")
+                    if (!command.isNullOrBlank()) {
+                        dispatchMediaControl(command)
+                    }
                 }
             }
-        }
-        val filter = android.content.IntentFilter().apply {
-            addAction("com.neno.desktop.MEDIA_CONTROL")
-            addAction("com.zuno.desktop.MEDIA_CONTROL")
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(mediaControlReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(mediaControlReceiver, filter)
+            val filter = android.content.IntentFilter().apply {
+                addAction("com.neno.desktop.MEDIA_CONTROL")
+                addAction("com.zuno.desktop.MEDIA_CONTROL")
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(mediaControlReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(mediaControlReceiver, filter)
+            }
+        } catch (e: Throwable) {
+            e.printStackTrace()
         }
     }
 
@@ -260,83 +297,9 @@ class MainActivity : TauriActivity() {
         }
     }
 
-    private var audioDeviceCallback: android.media.AudioDeviceCallback? = null
-    private var audioRouteReceiver: android.content.BroadcastReceiver? = null
-    private var lastRouteEventTime: Long = 0L
-
-    fun notifyAudioDeviceChanged() {
-        val now = System.currentTimeMillis()
-        if (now - lastRouteEventTime < 400) return
-        lastRouteEventTime = now
-        dispatchMediaControl("audioDeviceChanged")
-    }
-
-    private fun registerAudioRouteMonitoring() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-            if (am != null) {
-                audioDeviceCallback = object : android.media.AudioDeviceCallback() {
-                    override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
-                        notifyAudioDeviceChanged()
-                    }
-
-                    override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
-                        notifyAudioDeviceChanged()
-                    }
-                }
-                am.registerAudioDeviceCallback(audioDeviceCallback, Handler(Looper.getMainLooper()))
-            }
-        }
-
-        audioRouteReceiver = object : android.content.BroadcastReceiver() {
-            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-                when (intent?.action) {
-                    android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED,
-                    android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED,
-                    android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED,
-                    android.media.AudioManager.ACTION_HEADSET_PLUG -> {
-                        notifyAudioDeviceChanged()
-                    }
-                }
-            }
-        }
-        val filter = android.content.IntentFilter().apply {
-            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
-            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
-            addAction(android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
-            addAction(android.media.AudioManager.ACTION_HEADSET_PLUG)
-        }
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(audioRouteReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
-            } else {
-                registerReceiver(audioRouteReceiver, filter)
-            }
-        } catch (_: Exception) {}
-    }
-
-    private fun unregisterAudioRouteMonitoring() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-            audioDeviceCallback?.let {
-                try {
-                    am?.unregisterAudioDeviceCallback(it)
-                } catch (_: Exception) {}
-                audioDeviceCallback = null
-            }
-        }
-        audioRouteReceiver?.let {
-            try {
-                unregisterReceiver(it)
-            } catch (_: Exception) {}
-            audioRouteReceiver = null
-        }
-    }
-
     override fun onDestroy() {
         stopBackgroundKeepalive()
         unregisterMediaControlReceiver()
-        unregisterAudioRouteMonitoring()
         if (instance == this) {
             instance = null
         }
@@ -357,12 +320,22 @@ class MainActivity : TauriActivity() {
     class WebAppInterface(private val activity: MainActivity) {
         @JavascriptInterface
         fun updateMedia(title: String, artist: String, isPlaying: Boolean) {
-            MediaPlaybackService.startOrUpdate(activity, title, artist, isPlaying)
+            MediaPlaybackService.startOrUpdate(activity, title, artist, isPlaying, null, 0L, 0L, if (isPlaying) "playing" else "paused")
         }
 
         @JavascriptInterface
         fun updateMedia(title: String, artist: String, isPlaying: Boolean, artworkUrl: String?, durationSec: Long, positionSec: Long) {
-            MediaPlaybackService.startOrUpdate(activity, title, artist, isPlaying, artworkUrl, durationSec, positionSec)
+            MediaPlaybackService.startOrUpdate(activity, title, artist, isPlaying, artworkUrl, durationSec, positionSec, if (isPlaying) "playing" else "paused")
+        }
+
+        @JavascriptInterface
+        fun updateMedia(title: String, artist: String, isPlaying: Boolean, artworkUrl: String?, durationSec: Long, positionSec: Long, playbackState: String?) {
+            MediaPlaybackService.startOrUpdate(activity, title, artist, isPlaying, artworkUrl, durationSec, positionSec, playbackState ?: if (isPlaying) "playing" else "paused")
+        }
+
+        @JavascriptInterface
+        fun syncPosition(positionSec: Long) {
+            MediaPlaybackService.syncPosition(activity, positionSec)
         }
 
         @JavascriptInterface

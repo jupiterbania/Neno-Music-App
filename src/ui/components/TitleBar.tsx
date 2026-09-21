@@ -351,28 +351,26 @@ export function TitleBar({
                   aria-label="Connecting to YT Music"
                   title="Connecting to YouTube Music"
                   className={cn(
-                    "group relative flex h-7 w-[168px] shrink-0 items-center justify-between overflow-hidden rounded-full pl-1.5 pr-2.5 transition-all select-none",
+                    "group relative flex h-7 max-w-[145px] shrink-0 items-center justify-between overflow-hidden rounded-full pl-1.5 pr-2 transition-all select-none",
                     "bg-gradient-to-r from-red-500/15 via-red-500/10 to-red-500/5 hover:from-red-500/25 hover:to-red-500/15",
-                    "border border-red-500/30 hover:border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.12)] backdrop-blur-md",
+                    "border border-red-500/30 hover:border-red-500/50 shadow-xs backdrop-blur-md",
                     "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                     isAccountPanelOpen && "ring-1 ring-border",
                   )}
                 >
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <div className="relative flex size-4.5 shrink-0 items-center justify-center rounded-full bg-red-600 text-white shadow-xs">
-                      <svg viewBox="0 0 24 24" className="size-2.5 fill-white" aria-hidden="true">
+                    <div className="relative flex size-4 shrink-0 items-center justify-center rounded-full bg-red-600 text-white shadow-xs">
+                      <svg viewBox="0 0 24 24" className="size-2 fill-white" aria-hidden="true">
                         <circle cx="12" cy="12" r="7.5" fill="none" stroke="white" strokeWidth="2.2" />
                         <polygon points="10,8.5 15.5,12 10,15.5" fill="white" />
                       </svg>
-                      <span className="absolute -inset-0.5 rounded-full border border-red-500/60 animate-ping opacity-75" />
                     </div>
                     <span className="truncate text-[11px] font-semibold tracking-tight text-foreground/90">
-                      Connecting to YT Music
+                      Connecting
                     </span>
                   </div>
-                  <span className="relative flex size-2 shrink-0">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                    <span className="relative inline-flex size-2 rounded-full bg-amber-500" />
+                  <span className="relative flex size-1.5 shrink-0 ml-1">
+                    <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
                   </span>
                 </motion.button>
               ) : (

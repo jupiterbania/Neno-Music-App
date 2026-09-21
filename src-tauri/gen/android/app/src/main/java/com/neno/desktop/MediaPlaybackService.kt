@@ -42,6 +42,7 @@ class MediaPlaybackService : Service() {
         const val ACTION_PREV = "com.neno.desktop.ACTION_PREV"
         const val ACTION_STOP = "com.neno.desktop.ACTION_STOP"
         const val ACTION_UPDATE = "com.neno.desktop.ACTION_UPDATE"
+        const val ACTION_SYNC_POSITION = "com.neno.desktop.ACTION_SYNC_POSITION"
 
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_ARTIST = "extra_artist"
@@ -49,6 +50,7 @@ class MediaPlaybackService : Service() {
         const val EXTRA_ARTWORK_URL = "extra_artwork_url"
         const val EXTRA_DURATION_SEC = "extra_duration_sec"
         const val EXTRA_POSITION_SEC = "extra_position_sec"
+        const val EXTRA_PLAYBACK_STATE = "extra_playback_state"
 
         fun startOrUpdate(
             context: Context,
@@ -57,7 +59,8 @@ class MediaPlaybackService : Service() {
             isPlaying: Boolean,
             artworkUrl: String? = null,
             durationSec: Long = 0L,
-            positionSec: Long = 0L
+            positionSec: Long = 0L,
+            playbackState: String? = null
         ) {
             val intent = Intent(context, MediaPlaybackService::class.java).apply {
                 action = ACTION_UPDATE
@@ -67,6 +70,7 @@ class MediaPlaybackService : Service() {
                 putExtra(EXTRA_ARTWORK_URL, artworkUrl)
                 putExtra(EXTRA_DURATION_SEC, durationSec)
                 putExtra(EXTRA_POSITION_SEC, positionSec)
+                putExtra(EXTRA_PLAYBACK_STATE, playbackState ?: if (isPlaying) "playing" else "paused")
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -74,6 +78,18 @@ class MediaPlaybackService : Service() {
                 } else {
                     context.startService(intent)
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        fun syncPosition(context: Context, positionSec: Long) {
+            val intent = Intent(context, MediaPlaybackService::class.java).apply {
+                action = ACTION_SYNC_POSITION
+                putExtra(EXTRA_POSITION_SEC, positionSec)
+            }
+            try {
+                context.startService(intent)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -95,54 +111,33 @@ class MediaPlaybackService : Service() {
     private var mediaSession: MediaSessionCompat? = null
     private val imageExecutor = Executors.newSingleThreadExecutor()
 
-    private val webViewKeepaliveHandler = Handler(Looper.getMainLooper())
-    private val webViewKeepaliveRunnable = object : Runnable {
-        override fun run() {
-            if (isPlaying) {
-                MainActivity.instance?.let { activity ->
-                    activity.runOnUiThread {
-                        activity.targetWebView?.let { webView ->
-                            webView.resumeTimers()
-                            webView.evaluateJavascript("void 0;", null)
-                        }
-                    }
-                }
-                webViewKeepaliveHandler.postDelayed(this, 1000)
-            }
-        }
-    }
-
-    private fun startWebViewKeepalive() {
-        webViewKeepaliveHandler.removeCallbacks(webViewKeepaliveRunnable)
-        webViewKeepaliveHandler.post(webViewKeepaliveRunnable)
-    }
-
-    private fun stopWebViewKeepalive() {
-        webViewKeepaliveHandler.removeCallbacks(webViewKeepaliveRunnable)
-    }
-
     private var audioManager: AudioManager? = null
-    private var resumeOnCallEnd: Boolean = false
+    private var resumeOnFocusGain: Boolean = false
     private var audioFocusRequest: AudioFocusRequest? = null
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS -> {
-                resumeOnCallEnd = false
-                dispatchPause()
+                // Permanent loss of audio focus (e.g. another music app started)
+                resumeOnFocusGain = false
+                if (isPlaying && currentPlaybackState == "playing") {
+                    dispatchPause(isTransient = false)
+                }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                if (isPlaying) {
-                    resumeOnCallEnd = true
-                    dispatchPause()
+                // Transient loss of audio focus (e.g. incoming call, another app playing video)
+                if (isPlaying && currentPlaybackState == "playing") {
+                    resumeOnFocusGain = true
+                    dispatchPause(isTransient = true)
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                // Audio ducking permitted by Android
+                // Notifications, navigation alerts, chimes: DO NOT pause music playback
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                if (resumeOnCallEnd) {
-                    resumeOnCallEnd = false
+                // Focus regained! (call ended, video finished, audio focus restored)
+                if (resumeOnFocusGain) {
+                    resumeOnFocusGain = false
                     dispatchPlay()
                 }
             }
@@ -192,80 +187,117 @@ class MediaPlaybackService : Service() {
     private var currentTitle: String = "Neno"
     private var currentArtist: String = "Playing"
     private var isPlaying: Boolean = true
+    private var currentPlaybackState: String = "playing" // "playing" | "paused" | "loading" | "idle"
     private var currentArtworkUrl: String? = null
     private var currentArtworkBitmap: Bitmap? = null
+    private var loadingArtworkUrl: String? = null
+    private var failedArtworkUrl: String? = null
+    private var cachedFallbackIcon: Bitmap? = null
     private var durationSec: Long = 0L
     private var positionSec: Long = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private val serviceKeepaliveHandler = Handler(Looper.getMainLooper())
+    private val serviceKeepaliveRunnable = object : Runnable {
+        override fun run() {
+            try {
+                if (isPlaying) {
+                    MainActivity.instance?.let { act ->
+                        act.runOnUiThread {
+                            act.targetWebView?.let { wv ->
+                                wv.resumeTimers()
+                                wv.evaluateJavascript("void 0;", null)
+                            }
+                        }
+                    }
+                }
+            } catch (_: Throwable) {}
+            serviceKeepaliveHandler.postDelayed(this, 2500)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-        createNotificationChannel()
-        acquireWakeLock()
-        initMediaSession()
-        setupTelephonyListener()
-        registerAudioRouteMonitoring()
-        updateNotification()
+        try {
+            audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            createNotificationChannel()
+            acquireWakeLock()
+            initMediaSession()
+            setupTelephonyListener()
+            registerAudioRouteMonitoring()
+            updateNotification()
+            serviceKeepaliveHandler.post(serviceKeepaliveRunnable)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
     }
 
     // ── Becoming Noisy & Audio Route Changes (Bluetooth / Headphones) ──
     private var audioDeviceCallback: android.media.AudioDeviceCallback? = null
     private var audioRouteReceiver: BroadcastReceiver? = null
     private var lastServiceRouteEventTime: Long = 0L
+    private var isAudioRouteMonitoringActive: Boolean = false
 
     private fun notifyAudioDeviceChanged() {
+        if (!isAudioRouteMonitoringActive) return
         val now = System.currentTimeMillis()
-        if (now - lastServiceRouteEventTime < 400) return
+        if (now - lastServiceRouteEventTime < 1000) return
         lastServiceRouteEventTime = now
 
-        MainActivity.instance?.dispatchMediaControl("audioDeviceChanged")
-        sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "audioDeviceChanged"))
+        sendMediaCommand("audioDeviceChanged")
     }
 
     private fun registerAudioRouteMonitoring() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val am = audioManager ?: (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
-            if (am != null) {
-                audioDeviceCallback = object : android.media.AudioDeviceCallback() {
-                    override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
-                        notifyAudioDeviceChanged()
-                    }
-
-                    override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
-                        notifyAudioDeviceChanged()
-                    }
-                }
-                am.registerAudioDeviceCallback(audioDeviceCallback, android.os.Handler(android.os.Looper.getMainLooper()))
-            }
-        }
-
-        audioRouteReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                when (intent?.action) {
-                    android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED,
-                    android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED,
-                    android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED,
-                    AudioManager.ACTION_HEADSET_PLUG -> {
-                        notifyAudioDeviceChanged()
-                    }
-                }
-            }
-        }
-        val filter = IntentFilter().apply {
-            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
-            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
-            addAction(android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
-            addAction(AudioManager.ACTION_HEADSET_PLUG)
-        }
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(audioRouteReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-            } else {
-                registerReceiver(audioRouteReceiver, filter)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val am = audioManager ?: (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+                if (am != null) {
+                    audioDeviceCallback = object : android.media.AudioDeviceCallback() {
+                        override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                            notifyAudioDeviceChanged()
+                        }
+
+                        override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                            notifyAudioDeviceChanged()
+                        }
+                    }
+                    try {
+                        am.registerAudioDeviceCallback(audioDeviceCallback, android.os.Handler(android.os.Looper.getMainLooper()))
+                    } catch (_: Throwable) {}
+                }
             }
-        } catch (_: Exception) {}
+
+            audioRouteReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    when (intent?.action) {
+                        android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED,
+                        android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED,
+                        android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED,
+                        AudioManager.ACTION_HEADSET_PLUG -> {
+                            notifyAudioDeviceChanged()
+                        }
+                    }
+                }
+            }
+            val filter = IntentFilter().apply {
+                addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
+                addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
+                addAction(android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(AudioManager.ACTION_HEADSET_PLUG)
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    registerReceiver(audioRouteReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                } else {
+                    registerReceiver(audioRouteReceiver, filter)
+                }
+            } catch (_: Throwable) {}
+        } catch (_: Throwable) {}
+
+        Handler(Looper.getMainLooper()).postDelayed({
+            isAudioRouteMonitoringActive = true
+        }, 2000)
     }
 
     private fun unregisterAudioRouteMonitoring() {
@@ -291,8 +323,8 @@ class MediaPlaybackService : Service() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
                 if (isPlaying) {
-                    resumeOnCallEnd = false
-                    dispatchPause()
+                    resumeOnFocusGain = false
+                    dispatchPause(isTransient = false)
                 }
             }
         }
@@ -351,40 +383,50 @@ class MediaPlaybackService : Service() {
             TelephonyManager.CALL_STATE_OFFHOOK -> {
                 // Phone call incoming or active!
                 if (isPlaying) {
-                    resumeOnCallEnd = true
-                    dispatchPause()
+                    resumeOnFocusGain = true
+                    dispatchPause(isTransient = true)
                 }
             }
             TelephonyManager.CALL_STATE_IDLE -> {
                 // Call ended ("call cut hone ke baad")! Auto-resume playback.
-                if (resumeOnCallEnd) {
-                    resumeOnCallEnd = false
+                if (resumeOnFocusGain) {
+                    resumeOnFocusGain = false
                     dispatchPlay()
                 }
             }
         }
     }
 
+    private fun sendMediaCommand(command: String) {
+        val act = MainActivity.instance
+        if (act != null) {
+            act.dispatchMediaControl(command)
+        } else {
+            sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", command))
+        }
+    }
+
     // ── Systematic Play / Pause Dispatching ────────────────────────────
     private fun dispatchPlay() {
         isPlaying = true
+        currentPlaybackState = "playing"
+        resumeOnFocusGain = false
         requestAudioFocus()
         acquireWakeLock()
-        startWebViewKeepalive()
         registerNoisyReceiver()
-        MainActivity.instance?.dispatchMediaControl("play")
-        sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "play"))
+        sendMediaCommand("play")
         updateNotification()
     }
 
-    private fun dispatchPause() {
+    private fun dispatchPause(isTransient: Boolean = false) {
         isPlaying = false
-        stopWebViewKeepalive()
-        abandonAudioFocus()
+        currentPlaybackState = "paused"
+        if (!isTransient) {
+            abandonAudioFocus()
+        }
         releaseWakeLock()
         unregisterNoisyReceiver()
-        MainActivity.instance?.dispatchMediaControl("pause")
-        sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "pause"))
+        sendMediaCommand("pause")
         updateNotification()
     }
 
@@ -398,24 +440,22 @@ class MediaPlaybackService : Service() {
                     }
 
                     override fun onPause() {
-                        resumeOnCallEnd = false
-                        dispatchPause()
+                        resumeOnFocusGain = false
+                        dispatchPause(isTransient = false)
                     }
 
                     override fun onSkipToNext() {
-                        MainActivity.instance?.dispatchMediaControl("next")
-                        sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "next"))
+                        sendMediaCommand("next")
                     }
 
                     override fun onSkipToPrevious() {
-                        MainActivity.instance?.dispatchMediaControl("prev")
-                        sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "prev"))
+                        sendMediaCommand("prev")
                     }
 
                     override fun onSeekTo(pos: Long) {
                         val posSec = pos / 1000L
                         positionSec = posSec
-                        MainActivity.instance?.dispatchMediaControl("seekTo:$posSec")
+                        sendMediaCommand("seekTo:$posSec")
                         updateNotification()
                     }
 
@@ -432,53 +472,80 @@ class MediaPlaybackService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                resumeOnCallEnd = false
+                resumeOnFocusGain = false
                 abandonAudioFocus()
                 unregisterNoisyReceiver()
-                releaseWakeLock()
+                releaseWakeLock(immediate = true)
                 stopForeground(true)
                 stopSelf()
                 return START_NOT_STICKY
             }
             ACTION_PLAY -> {
+                resumeOnFocusGain = false
                 dispatchPlay()
             }
             ACTION_PAUSE -> {
-                resumeOnCallEnd = false
-                dispatchPause()
+                resumeOnFocusGain = false
+                dispatchPause(isTransient = false)
             }
             ACTION_NEXT -> {
-                MainActivity.instance?.dispatchMediaControl("next")
-                sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "next"))
+                sendMediaCommand("next")
             }
             ACTION_PREV -> {
-                MainActivity.instance?.dispatchMediaControl("prev")
-                sendBroadcast(Intent("com.neno.desktop.MEDIA_CONTROL").putExtra("command", "prev"))
+                sendMediaCommand("prev")
+            }
+            ACTION_SYNC_POSITION -> {
+                val newPos = intent.getLongExtra(EXTRA_POSITION_SEC, positionSec)
+                if (Math.abs(newPos - positionSec) >= 2L) {
+                    positionSec = newPos
+                    updateMediaSessionPlaybackState()
+                }
             }
             ACTION_UPDATE -> {
-                currentTitle = intent.getStringExtra(EXTRA_TITLE) ?: "Neno"
-                currentArtist = intent.getStringExtra(EXTRA_ARTIST) ?: "Playing"
+                val newTitle = intent.getStringExtra(EXTRA_TITLE) ?: "Neno"
+                val newArtist = intent.getStringExtra(EXTRA_ARTIST) ?: "Playing"
                 val newIsPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, true)
-                durationSec = intent.getLongExtra(EXTRA_DURATION_SEC, 0L)
-                positionSec = intent.getLongExtra(EXTRA_POSITION_SEC, 0L)
+                val newDurationSec = intent.getLongExtra(EXTRA_DURATION_SEC, 0L)
+                val newPositionSec = intent.getLongExtra(EXTRA_POSITION_SEC, 0L)
                 val newArtworkUrl = intent.getStringExtra(EXTRA_ARTWORK_URL)
+                val newPlaybackState = intent.getStringExtra(EXTRA_PLAYBACK_STATE) ?: if (newIsPlaying) "playing" else "paused"
 
-                if (newIsPlaying) {
-                    isPlaying = true
+                val metadataChanged = (newTitle != currentTitle) ||
+                    (newArtist != currentArtist) ||
+                    (newDurationSec != durationSec) ||
+                    (newArtworkUrl != null && newArtworkUrl != currentArtworkUrl)
+
+                val playStateChanged = (newIsPlaying != isPlaying) || (newPlaybackState != currentPlaybackState)
+
+                currentTitle = newTitle
+                currentArtist = newArtist
+                durationSec = newDurationSec
+                positionSec = newPositionSec
+                currentPlaybackState = newPlaybackState
+
+                if (newIsPlaying || newPlaybackState == "loading" || newPlaybackState == "playing") {
+                    isPlaying = (newPlaybackState == "playing")
+                    resumeOnFocusGain = false
                     requestAudioFocus()
                     acquireWakeLock()
-                    startWebViewKeepalive()
                     registerNoisyReceiver()
                 } else {
                     isPlaying = false
-                    stopWebViewKeepalive()
-                    abandonAudioFocus()
+                    if (!resumeOnFocusGain) {
+                        abandonAudioFocus()
+                    }
                     releaseWakeLock()
                     unregisterNoisyReceiver()
                 }
 
-                loadArtworkAsync(newArtworkUrl)
-                updateNotification()
+                if (metadataChanged || playStateChanged) {
+                    if (newArtworkUrl != null) {
+                        loadArtworkAsync(newArtworkUrl)
+                    }
+                    updateNotification()
+                } else {
+                    updateMediaSessionPlaybackState()
+                }
             }
             else -> {
                 updateNotification()
@@ -534,21 +601,27 @@ class MediaPlaybackService : Service() {
         if (url.isNullOrBlank()) {
             currentArtworkUrl = null
             currentArtworkBitmap = null
+            loadingArtworkUrl = null
+            failedArtworkUrl = null
             return
         }
         if (url == currentArtworkUrl && currentArtworkBitmap != null) {
             return
         }
-        currentArtworkUrl = url
+        if (url == loadingArtworkUrl || url == failedArtworkUrl) {
+            return
+        }
+
+        loadingArtworkUrl = url
         imageExecutor.execute {
             val candidates = artworkUrlCandidates(url)
             var loaded: Bitmap? = null
             for (candidate in candidates) {
-                if (currentArtworkUrl != url) return@execute // track changed mid-load
+                if (loadingArtworkUrl != url) return@execute // track changed mid-load
                 try {
                     val connection = (java.net.URL(candidate).openConnection() as java.net.HttpURLConnection).apply {
-                        connectTimeout = 6000
-                        readTimeout = 8000
+                        connectTimeout = 4000
+                        readTimeout = 5000
                         instanceFollowRedirects = true
                         setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10)")
                     }
@@ -566,14 +639,35 @@ class MediaPlaybackService : Service() {
                     // try next candidate
                 }
             }
-            if (loaded != null && currentArtworkUrl == url) {
-                currentArtworkBitmap = loaded
-                updateNotification()
+            if (loadingArtworkUrl == url) {
+                loadingArtworkUrl = null
+                if (loaded != null) {
+                    currentArtworkUrl = url
+                    currentArtworkBitmap = loaded
+                    failedArtworkUrl = null
+                    updateNotification()
+                } else {
+                    failedArtworkUrl = url
+                }
             }
         }
     }
 
+    private val wakeLockReleaseHandler = Handler(Looper.getMainLooper())
+    private val wakeLockReleaseRunnable = Runnable {
+        if (!isPlaying) {
+            try {
+                wakeLock?.let {
+                    if (it.isHeld) {
+                        it.release()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun acquireWakeLock() {
+        wakeLockReleaseHandler.removeCallbacks(wakeLockReleaseRunnable)
         if (wakeLock == null) {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = powerManager.newWakeLock(
@@ -588,17 +682,22 @@ class MediaPlaybackService : Service() {
         }
     }
 
-    private fun releaseWakeLock() {
-        try {
-            wakeLock?.let {
-                if (it.isHeld) {
-                    it.release()
+    private fun releaseWakeLock(immediate: Boolean = false) {
+        if (immediate) {
+            wakeLockReleaseHandler.removeCallbacks(wakeLockReleaseRunnable)
+            try {
+                wakeLock?.let {
+                    if (it.isHeld) {
+                        it.release()
+                    }
                 }
-            }
-        } catch (_: Exception) {}
-        // Do NOT null out wakeLock here — keeping the reference means acquireWakeLock() can
-        // re-acquire the same lock object without a race where the reference is momentarily
-        // absent and a concurrent acquire call skips the isHeld check on a null reference.
+            } catch (_: Exception) {}
+        } else {
+            // 20-second grace period: prevents CPU from instantly sleeping during track
+            // transition, buffering, or temporary pause.
+            wakeLockReleaseHandler.removeCallbacks(wakeLockReleaseRunnable)
+            wakeLockReleaseHandler.postDelayed(wakeLockReleaseRunnable, 20000L)
+        }
     }
 
     private fun createNotificationChannel() {
@@ -617,7 +716,7 @@ class MediaPlaybackService : Service() {
         }
     }
 
-    private fun updateNotification() {
+    private fun updateMediaSessionPlaybackState() {
         try {
             val playbackActions = PlaybackStateCompat.ACTION_PLAY or
                 PlaybackStateCompat.ACTION_PAUSE or
@@ -627,102 +726,165 @@ class MediaPlaybackService : Service() {
                 PlaybackStateCompat.ACTION_SEEK_TO or
                 PlaybackStateCompat.ACTION_STOP
 
+            val sessionState = when (currentPlaybackState) {
+                "loading" -> PlaybackStateCompat.STATE_BUFFERING
+                "playing" -> PlaybackStateCompat.STATE_PLAYING
+                else -> PlaybackStateCompat.STATE_PAUSED
+            }
+
+            val playbackSpeed = if (sessionState == PlaybackStateCompat.STATE_PLAYING) 1.0f else 0.0f
+
             val stateBuilder = PlaybackStateCompat.Builder()
                 .setActions(playbackActions)
                 .setState(
-                    if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED,
+                    sessionState,
                     positionSec * 1000L,
-                    if (isPlaying) 1.0f else 0.0f
+                    playbackSpeed
                 )
             mediaSession?.setPlaybackState(stateBuilder.build())
-
-            val metaBuilder = MediaMetadataCompat.Builder()
-                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTitle)
-                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
-                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "Neno Music")
-                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationSec * 1000L)
-
-            currentArtworkBitmap?.let {
-                metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it)
-                metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, it)
-                metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, it)
-            }
-            mediaSession?.setMetadata(metaBuilder.build())
-        } catch (_: Exception) {}
-
-        val openAppIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val contentPendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val prevIntent = Intent(this, MediaPlaybackService::class.java).apply { action = ACTION_PREV }
-        val prevPendingIntent = PendingIntent.getService(this, 1, prevIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
-        val playPauseAction = if (isPlaying) ACTION_PAUSE else ACTION_PLAY
-        val playPauseIntent = Intent(this, MediaPlaybackService::class.java).apply { action = playPauseAction }
-        val playPausePendingIntent = PendingIntent.getService(this, 2, playPauseIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
-        val nextIntent = Intent(this, MediaPlaybackService::class.java).apply { action = ACTION_NEXT }
-        val nextPendingIntent = PendingIntent.getService(this, 3, nextIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
-        val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
-            .setShowActionsInCompactView(0, 1, 2)
-        mediaSession?.sessionToken?.let { token ->
-            mediaStyle.setMediaSession(token)
-        }
-
-        val fallbackLargeIcon: Bitmap = try {
-            BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
-        } catch (_: Exception) { BitmapFactory.decodeResource(resources, android.R.drawable.ic_menu_info_details) }
-
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setLargeIcon(currentArtworkBitmap ?: fallbackLargeIcon)
-            .setContentTitle(currentTitle)
-            .setContentText(currentArtist)
-            .setSubText("Neno Music")
-            .setContentIntent(contentPendingIntent)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setOngoing(isPlaying)
-            .setColorized(true)
-            .setColor(0xFFFF7700.toInt())
-            .addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent)
-            .addAction(
-                if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
-                if (isPlaying) "Pause" else "Play",
-                playPausePendingIntent
-            )
-            .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
-            .setStyle(mediaStyle)
-            .build()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
-
-        try {
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            notificationManager?.notify(NOTIFICATION_ID, notification)
         } catch (_: Exception) {}
     }
 
+    private fun getFallbackLargeIcon(): Bitmap? {
+        cachedFallbackIcon?.let { return it }
+        val icon: Bitmap? = try {
+            val drawable = androidx.core.content.ContextCompat.getDrawable(this, R.mipmap.ic_launcher)
+                ?: androidx.core.content.ContextCompat.getDrawable(this, android.R.drawable.ic_menu_info_details)
+            if (drawable != null) {
+                val width = if (drawable.intrinsicWidth > 0) Math.min(drawable.intrinsicWidth, 256) else 192
+                val height = if (drawable.intrinsicHeight > 0) Math.min(drawable.intrinsicHeight, 256) else 192
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                val canvas = android.graphics.Canvas(bitmap)
+                drawable.setBounds(0, 0, canvas.width, canvas.height)
+                drawable.draw(canvas)
+                bitmap
+            } else {
+                null
+            }
+        } catch (_: Throwable) {
+            null
+        }
+        cachedFallbackIcon = icon
+        return icon
+    }
+
+    private fun updateNotification() {
+        try {
+            updateMediaSessionPlaybackState()
+            try {
+                val metaBuilder = MediaMetadataCompat.Builder()
+                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTitle)
+                    .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
+                    .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "Neno Music")
+                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationSec * 1000L)
+
+                currentArtworkBitmap?.let {
+                    metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it)
+                    metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, it)
+                    metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, it)
+                }
+                mediaSession?.setMetadata(metaBuilder.build())
+            } catch (_: Throwable) {}
+
+            val openAppIntent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val contentPendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                openAppIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val prevIntent = Intent(this, MediaPlaybackService::class.java).apply { action = ACTION_PREV }
+            val prevPendingIntent = PendingIntent.getService(this, 1, prevIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+            val isLoading = (currentPlaybackState == "loading")
+            val isPlayingNow = isPlaying && !isLoading
+
+            val playPauseAction = if (isPlayingNow || isLoading) ACTION_PAUSE else ACTION_PLAY
+            val playPauseIntent = Intent(this, MediaPlaybackService::class.java).apply { action = playPauseAction }
+            val playPausePendingIntent = PendingIntent.getService(this, 2, playPauseIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+            val nextIntent = Intent(this, MediaPlaybackService::class.java).apply { action = ACTION_NEXT }
+            val nextPendingIntent = PendingIntent.getService(this, 3, nextIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+            val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
+                .setShowActionsInCompactView(0, 1, 2)
+            mediaSession?.sessionToken?.let { token ->
+                mediaStyle.setMediaSession(token)
+            }
+
+            val largeIcon = currentArtworkBitmap ?: getFallbackLargeIcon()
+
+            val subTextString = when {
+                isLoading -> "Neno Music • Loading..."
+                !isPlayingNow -> "Neno Music • Paused"
+                else -> "Neno Music"
+            }
+
+            val contentTextString = if (isLoading) {
+                "$currentArtist • Searching stream..."
+            } else {
+                currentArtist
+            }
+
+            val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(currentTitle)
+                .setContentText(contentTextString)
+                .setSubText(subTextString)
+                .setContentIntent(contentPendingIntent)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setOngoing(isPlayingNow || isLoading)
+                .setColorized(true)
+                .setColor(0xFFFF7700.toInt())
+                .addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent)
+                .addAction(
+                    if (isPlayingNow || isLoading) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+                    if (isPlayingNow || isLoading) "Pause" else "Play",
+                    playPausePendingIntent
+                )
+                .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
+                .setStyle(mediaStyle)
+
+            if (largeIcon != null) {
+                notificationBuilder.setLargeIcon(largeIcon)
+            }
+
+            val notification = notificationBuilder.build()
+
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                    )
+                } else {
+                    startForeground(NOTIFICATION_ID, notification)
+                }
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+
+            try {
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                notificationManager?.notify(NOTIFICATION_ID, notification)
+            } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
     override fun onDestroy() {
-        stopWebViewKeepalive()
+        resumeOnFocusGain = false
+        serviceKeepaliveHandler.removeCallbacks(serviceKeepaliveRunnable)
+        wakeLockReleaseHandler.removeCallbacks(wakeLockReleaseRunnable)
         abandonAudioFocus()
         unregisterNoisyReceiver()
         unregisterAudioRouteMonitoring()
-        releaseWakeLock()
+        releaseWakeLock(immediate = true)
         try {
             mediaSession?.isActive = false
             mediaSession?.release()

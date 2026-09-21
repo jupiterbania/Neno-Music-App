@@ -5175,12 +5175,16 @@ async fn proxy_http_request(
         }
     })?;
 
-    let mut client_builder = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36");
+    let timeout = input
+        .timeout_ms
+        .map(Duration::from_millis)
+        .unwrap_or(Duration::from_secs(20));
 
-    if let Some(timeout_ms) = input.timeout_ms {
-        client_builder = client_builder.timeout(Duration::from_millis(timeout_ms));
-    }
+    let mut client_builder = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36")
+        .timeout(timeout)
+        .connect_timeout(Duration::from_secs(10))
+        .tcp_keepalive(Duration::from_secs(15));
 
     if let Some(local_address) = signed_googlevideo_local_address(&request_url) {
         eprintln!(
@@ -5402,10 +5406,14 @@ pub fn ensure_android_context_initialized(
     context_ptr: *mut std::ffi::c_void,
 ) {
     if !ANDROID_CONTEXT_INITIALIZED.swap(true, std::sync::atomic::Ordering::SeqCst) {
-        unsafe {
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
             ndk_context::initialize_android_context(vm_ptr, context_ptr);
+        }));
+        if res.is_ok() {
+            eprintln!("[internal][tauri][info] ndk_context successfully initialized");
+        } else {
+            eprintln!("[internal][tauri][warn] ndk_context initialization panicked or was already set");
         }
-        eprintln!("[internal][tauri][info] ndk_context successfully initialized");
     } else {
         eprintln!("[internal][tauri][info] ndk_context already initialized, skipping");
     }

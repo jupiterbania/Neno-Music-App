@@ -12,8 +12,10 @@ import {
   startOfflineProgressFeed,
 } from "./offlineStore";
 
-const dataSource = new YouTubeMusicDataSource();
-dataSource.warmPlayback?.();
+export const dataSource = new YouTubeMusicDataSource();
+if (typeof window !== "undefined") {
+  dataSource.warmPlayback?.();
+}
 
 export const libraryController = new LibraryController(dataSource);
 export const searchController = new SearchController(dataSource);
@@ -36,19 +38,22 @@ setOfflineStreamResolver((track, quality) => {
   if (!resolver) throw new Error("Downloads are unavailable for this source.");
   return resolver.call(dataSource, track, quality);
 });
-void hydrateOfflineStore();
-startOfflineProgressFeed();
+
+if (typeof window !== "undefined") {
+  void hydrateOfflineStore();
+  startOfflineProgressFeed();
+}
 
 export const tabManager = new TabManager(dataSource);
 /*
  * Read once, at module scope, before anything can toggle it. Restoring is all-or-nothing for a
  * given launch — half a session is worse than none.
  */
-const restoredSession = readSessionRestoreEnabled() ? loadAppSession() : null;
+const restoredSession = typeof window !== "undefined" && readSessionRestoreEnabled() ? loadAppSession() : null;
 if (restoredSession) {
   tabManager.restoreSession(restoredSession.player);
 }
-if (!tabManager.getActiveId()) {
+if (typeof window !== "undefined" && !tabManager.getActiveId()) {
   tabManager.createTab("1");
 }
 

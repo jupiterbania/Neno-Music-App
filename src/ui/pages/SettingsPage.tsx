@@ -212,6 +212,15 @@ import {
   setOfflineMaxBytes,
   useOfflineState,
 } from "../../player/offlineStore";
+import {
+  setAdaptiveThemeEnabled,
+  useAdaptiveThemeEnabled,
+} from "../settings/adaptiveTheme";
+import {
+  setAutoDownloadLikedEnabled,
+  useAutoDownloadLikedEnabled,
+} from "../settings/autoDownloadLiked";
+import { clearArtworkCache } from "../../internal/artworkCache";
 
 
 
@@ -810,6 +819,8 @@ export function SettingsPage({
   const offlineState = useOfflineState();
   const streamingQuality = useStreamingQuality();
   const downloadQuality = useDownloadQuality();
+  const adaptiveThemeEnabled = useAdaptiveThemeEnabled();
+  const autoDownloadLiked = useAutoDownloadLikedEnabled();
   const [offlineMaxGb, setOfflineMaxGb] = useState(
     () => getOfflineMaxBytes() / 1024 ** 3,
   );
@@ -969,6 +980,7 @@ export function SettingsPage({
     setCacheBusy(true);
     setCacheError(null);
     try {
+      clearArtworkCache();
       setCacheStats(await clearCache());
     } catch {
       setCacheError("Unable to clear cached content.");
@@ -1716,6 +1728,16 @@ export function SettingsPage({
                 </button>
               </div>
             </div>
+
+            {/* Auto-download liked songs toggle */}
+            <div className="pt-1">
+              <SettingToggle
+                title="Auto-download liked songs"
+                description="Automatically download songs to local device storage whenever you hit like."
+                checked={autoDownloadLiked}
+                onCheckedChange={setAutoDownloadLikedEnabled}
+              />
+            </div>
           </section>
 
           <section className={SETTINGS_CARD} aria-labelledby="library-quality-title">
@@ -2453,6 +2475,15 @@ export function SettingsPage({
                   </button>
                 );
               })}
+            </div>
+
+            <div className="pt-2 border-t border-border/20">
+              <SettingToggle
+                title="Dynamic album art glow"
+                description="Extract ambient colors and subtle glowing highlights from the currently playing album cover."
+                checked={adaptiveThemeEnabled}
+                onCheckedChange={setAdaptiveThemeEnabled}
+              />
             </div>
           </section>
 

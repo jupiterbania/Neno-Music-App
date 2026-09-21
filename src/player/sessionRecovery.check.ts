@@ -10,14 +10,21 @@
  */
 export {};
 
-/* Hand-rolled stubs rather than a framework: this file only needs somewhere for the module's
-   top-level `localStorage` read to land. */
 const store = new Map<string, string>();
+const storage = {
+  getItem: (key: string) => store.get(key) ?? null,
+  setItem: (key: string, value: string) => void store.set(key, value),
+  removeItem: (key: string) => void store.delete(key),
+};
 Object.assign(globalThis, {
-  localStorage: {
-    getItem: (key: string) => store.get(key) ?? null,
-    setItem: (key: string, value: string) => void store.set(key, value),
-    removeItem: (key: string) => void store.delete(key),
+  localStorage: storage,
+  window: {
+    localStorage: storage,
+    setTimeout: (...args: Parameters<typeof setTimeout>) => globalThis.setTimeout(...args),
+    clearTimeout: (...args: Parameters<typeof clearTimeout>) => globalThis.clearTimeout(...args),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => true,
   },
 });
 
@@ -112,7 +119,7 @@ function makeDataSource(
   await controller.initialize();
 
   expire();
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await new Promise((resolve) => setTimeout(resolve, 50));
 
   equal(controller.getState().status, "signed-out", "a failed recovery signs out");
   check(
@@ -122,7 +129,7 @@ function makeDataSource(
 
   // Already signed out: further rejections must not reopen the hidden window.
   expire();
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await new Promise((resolve) => setTimeout(resolve, 50));
   equal(refreshCalls(), 1, "rejections after signing out do not retry");
 }
 
@@ -136,7 +143,7 @@ function makeDataSource(
   await controller.initialize();
 
   expire();
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await new Promise((resolve) => setTimeout(resolve, 50));
 
   equal(
     controller.getState().status,
@@ -152,6 +159,7 @@ function makeDataSource(
 {
   const { controller, refreshCalls } = makeDataSource(true, false, false);
   await controller.initialize();
+  await new Promise((resolve) => setTimeout(resolve, 50));
 
   equal(refreshCalls(), 1, "a missing credential asks the login partition before the user");
   equal(controller.getState().status, "ready", "and a renewal there starts up signed in");
@@ -161,6 +169,7 @@ function makeDataSource(
 {
   const { controller } = makeDataSource(false, false, false);
   await controller.initialize();
+  await new Promise((resolve) => setTimeout(resolve, 50));
 
   equal(controller.getState().status, "signed-out", "a genuinely absent session signs out");
   equal(controller.getState().error, null, "with no error: nothing failed, nobody is signed in");

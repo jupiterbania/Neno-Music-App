@@ -75,6 +75,7 @@ src-tauri/target/
 **/target/
 *.apk
 release-apk/
+release-apks/
 dist-apk/
 *log*.txt
 *.txt

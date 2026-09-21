@@ -24,14 +24,6 @@ android {
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "2").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.3")
     }
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64")
-            isUniversalApk = true
-        }
-    }
     buildTypes {
         getByName("debug") {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
@@ -92,6 +84,19 @@ android {
     }
     buildFeatures {
         buildConfig = true
+    }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 

@@ -485,8 +485,8 @@ export function HomePage({
     TOP_SUGGESTIONS_COUNT + MORE_SUGGESTIONS_COUNT,
   );
   const surpriseSuggestions = suggestions.slice(TOP_SUGGESTIONS_COUNT);
-  const playTrack = useCallback((track: Track, queue: readonly Track[]) => {
-    void playerController.playTrackById(track.id, queue, true);
+  const playTrack = useCallback((track: Track, _queue?: readonly Track[]) => {
+    void playerController.playTrackById(track.id);
   }, [playerController]);
 
   const playSurprise = () => {

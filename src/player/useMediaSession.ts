@@ -4,9 +4,10 @@ import { listen } from "@tauri-apps/api/event";
 import type { PlayerState } from "./PlayerController";
 import type { PlayerControllerActions } from "./playerStore";
 import { logInternalWarn } from "../internal/logging";
+import { isAndroid, isLinux } from "../ui/platform";
 import { useLinuxMediaSession } from "../ui/settings/mediaSession";
-import { isLinux } from "../ui/platform";
 import { getArtworkUrlCandidates } from "../datasource/youtube/artwork";
+import { isAndroidEnvironment } from "./androidMediaBridge";
 
 type NativeMediaAction =
   | "play"
@@ -16,25 +17,16 @@ type NativeMediaAction =
   | "previous"
   | { action: "seekTo"; positionSec: number };
 
+const usesNativeAndroidMediaSession =
+  isAndroid || isAndroidEnvironment();
 const usesNativeWindowsMediaSession =
   isTauri() && /Windows/i.test(navigator.userAgent);
-/*
- * macOS goes through MPNowPlayingInfoCenter rather than the WebView's media session, because
- * only the native centre reaches Control Center, the lock screen and the F7-F9 keys. The Rust
- * side (`macos_media.rs`) has always been built and registered — it simply had no caller, so
- * the app was invisible to macOS media controls.
- *
- * Linux registers its own MPRIS2 D-Bus interface (`linux_media.rs`, via souvlaki) rather than
- * relying on WebKitGTK's own bridge, because the bridge doesn't surface next/previous through
- * the desktop widget or media keys. Unlike Windows/macOS this one has an on/off switch — the
- * existing "Show in system media controls" setting — since it's the only platform that ever had
- * one to turn off.
- */
 const usesNativeMacosMediaSession =
   isTauri() && /Macintosh|Mac OS X/i.test(navigator.userAgent);
 const usesNativeLinuxMediaSession =
   isTauri() && isLinux;
 const usesNativeMediaSession =
+  usesNativeAndroidMediaSession ||
   usesNativeWindowsMediaSession ||
   usesNativeMacosMediaSession ||
   usesNativeLinuxMediaSession;

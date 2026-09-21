@@ -6,6 +6,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ClockIcon,
   DislikeActiveIcon,
   DislikeIcon,
   DownloadIcon,
@@ -471,6 +472,32 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
     toastTimeoutRef.current = window.setTimeout(() => setToastMessage(null), 2500);
   };
 
+  // Quick Sleep Timer state & synchronization
+  const [sleepRemainingMs, setSleepRemainingMs] = useState<number | null>(() =>
+    playerController.getSleepTimerRemainingMs(),
+  );
+  const [isSleepTimerSheetOpen, setIsSleepTimerSheetOpen] = useState(false);
+  const isSleepActive = sleepRemainingMs !== null;
+
+  useEffect(() => {
+    if (!isSleepActive) return;
+    const tick = () => setSleepRemainingMs(playerController.getSleepTimerRemainingMs());
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [isSleepActive]);
+
+  const handleSetSleepTimer = (minutes: number | null) => {
+    playerController.setSleepTimer(minutes);
+    setSleepRemainingMs(playerController.getSleepTimerRemainingMs());
+    setIsSleepTimerSheetOpen(false);
+    if (minutes !== null) {
+      showToast(`Sleep timer set for ${minutes} min`);
+    } else {
+      showToast("Sleep timer turned off");
+    }
+  };
+
   // Header "Playing from" label (matches Image 2's "{Title} Mix")
   const playingFromTitle =
     currentTrack?.title
@@ -901,8 +928,27 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
                 </button>
               </div>
 
-              {/* Right Action Icons: Cast & 3-dots Menu */}
+              {/* Right Action Icons: Sleep Timer, Cast & 3-dots Menu */}
               <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setIsSleepTimerSheetOpen(true)}
+                  className={cn(
+                    "relative flex size-10 items-center justify-center rounded-full transition-all active:scale-90",
+                    isSleepActive
+                      ? "text-primary font-bold bg-primary/20"
+                      : "text-white/90 hover:text-white",
+                  )}
+                  aria-label="Sleep timer"
+                  title="Sleep Timer"
+                >
+                  <ClockIcon size={20} />
+                  {isSleepActive && sleepRemainingMs !== null && (
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground tabular-nums shadow-sm">
+                      {Math.ceil(sleepRemainingMs / 60000)}m
+                    </span>
+                  )}
+                </button>
                 <button
                   type="button"
                   onClick={handleCastClick}
@@ -1439,6 +1485,74 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
             {toastMessage}
           </div>
         )}
+
+        {/* Sleep Timer Bottom Sheet Modal */}
+        <AnimatePresence>
+          {isSleepTimerSheetOpen && (
+            <div className="fixed inset-0 z-[80] flex flex-col justify-end">
+              {/* Dim Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsSleepTimerSheetOpen(false)}
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              />
+
+              {/* Sheet content */}
+              <motion.div
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                transition={{ type: "spring", damping: 28, stiffness: 320 }}
+                className="relative z-10 flex flex-col rounded-t-3xl bg-[#1c1c1e] border-t border-white/10 px-5 pt-4 pb-8 shadow-2xl"
+              >
+                {/* Drag handle */}
+                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/30" />
+
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <ClockIcon size={20} className="text-primary" />
+                    <span className="text-base font-bold text-white">Sleep Timer</span>
+                  </div>
+                  {isSleepActive && sleepRemainingMs !== null && (
+                    <span className="text-xs font-medium text-primary bg-primary/10 px-2.5 py-1 rounded-full tabular-nums">
+                      {formatMinutesSeconds(Math.ceil(sleepRemainingMs / 1000))} left
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1.5 pt-3">
+                  {[15, 30, 45, 60, 90].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => handleSetSleepTimer(mins)}
+                      className="flex items-center justify-between px-3.5 py-3 rounded-xl text-left text-sm font-medium text-white/90 hover:bg-white/10 active:bg-white/15 transition-colors"
+                    >
+                      <span>{mins} minutes</span>
+                      {isSleepActive &&
+                        sleepRemainingMs !== null &&
+                        Math.ceil(sleepRemainingMs / 60000) === mins && (
+                          <CheckIcon size={18} className="text-primary" />
+                        )}
+                    </button>
+                  ))}
+
+                  {isSleepActive && (
+                    <button
+                      type="button"
+                      onClick={() => handleSetSleepTimer(null)}
+                      className="flex items-center justify-between px-3.5 py-3 rounded-xl text-left text-sm font-semibold text-destructive hover:bg-destructive/10 active:bg-destructive/15 transition-colors mt-1 border-t border-white/5"
+                    >
+                      <span>Turn off timer</span>
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </motion.div>
     )}
   </AnimatePresence>

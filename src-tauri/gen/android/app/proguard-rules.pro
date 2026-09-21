@@ -1,48 +1,29 @@
-# ── Tauri & WebView bridge ────────────────────────────────────────────────────
-# Tauri uses reflection and JS→native calls extensively. Without these rules the
-# R8 minifier strips the bridge classes and the app crashes at runtime even
-# though it compiles fine.
+# Custom Proguard rules for Neno Music Android App
 
-# Keep all Tauri internals
--keep class app.tauri.** { *; }
--keep interface app.tauri.** { *; }
--keepclassmembers class app.tauri.** { *; }
-
-# Keep the main Activity and anything annotated for JS interop
--keep class com.neno.desktop.** { *; }
--keepclassmembers class com.neno.desktop.** { *; }
--keep class com.zuno.desktop.** { *; }
--keepclassmembers class com.zuno.desktop.** { *; }
-
-# AndroidMediaBridge — called from JavaScript by name
--keep class * extends android.webkit.WebView { *; }
+# Keep all JavascriptInterface annotations and methods for WebView <-> JS Bridge
+-keepattributes *Annotation*
+-keepattributes JavascriptInterface
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# Tauri plugin entry points loaded via reflection
--keep class * implements app.tauri.plugin.Plugin { *; }
--keepclassmembers class * implements app.tauri.plugin.Plugin {
-    public *;
+# Keep the WebAppInterface and its methods used by AndroidMediaBridge
+-keep class com.neno.desktop.MainActivity$WebAppInterface {
+    public <methods>;
 }
 
-# ── AndroidX / Lifecycle ──────────────────────────────────────────────────────
--keep class androidx.lifecycle.** { *; }
+# Keep MediaPlaybackService and its public members for background audio playback & notifications
+-keep class com.neno.desktop.MediaPlaybackService {
+    public <methods>;
+}
+
+# Keep AndroidX Media and MediaSession classes
 -keep class androidx.media.** { *; }
--keep class androidx.webkit.** { *; }
+-keep class android.support.v4.media.** { *; }
 
-# ── Kotlin runtime ────────────────────────────────────────────────────────────
--keep class kotlin.Metadata { *; }
--dontwarn kotlin.**
--dontwarn kotlinx.**
-
-# ── General safety ────────────────────────────────────────────────────────────
-# Preserve line numbers in stack traces for crash reports
--keepattributes SourceFile,LineNumberTable
--renamesourcefileattribute SourceFile
-
-# Suppress warnings about missing classes that are optional at runtime
--dontwarn javax.annotation.**
--dontwarn org.conscrypt.**
--dontwarn org.bouncycastle.**
--dontwarn org.openjsse.**
+# Strip verbose/debug logging calls in release builds if desired, but keep crash handlers
+-assumenosideeffects class android.util.Log {
+    public static boolean isLoggable(java.lang.String, int);
+    public static int v(...);
+    public static int d(...);
+}

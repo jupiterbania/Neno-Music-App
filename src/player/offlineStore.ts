@@ -74,6 +74,7 @@ function asManifest(parsed: unknown): Record<string, OfflineEntry> | null {
 }
 
 function readManifest(): Record<string, OfflineEntry> {
+  if (typeof localStorage === "undefined") return {};
   try {
     const raw = localStorage.getItem(MANIFEST_KEY) ?? localStorage.getItem(LEGACY_MANIFEST_KEY);
     return asManifest(JSON.parse(raw ?? "{}")) ?? {};
@@ -92,20 +93,25 @@ function readManifest(): Record<string, OfflineEntry> {
  * enough home for that on its own.
  */
 async function readDurableManifest(): Promise<Record<string, OfflineEntry>> {
+  if (typeof window === "undefined") return {};
   const fromNeno = await getAppSetting<unknown>(MANIFEST_KEY);
   if (fromNeno) return asManifest(fromNeno) ?? {};
   return asManifest(await getAppSetting<unknown>(LEGACY_MANIFEST_KEY)) ?? {};
 }
 
 function writeManifest(entries: Record<string, OfflineEntry>): void {
-  try {
-    localStorage.setItem(MANIFEST_KEY, JSON.stringify(entries));
-  } catch (error) {
-    logInternalWarn("offlineStore.writeManifest failed", {
-      error: error instanceof Error ? error.message : String(error),
-    });
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.setItem(MANIFEST_KEY, JSON.stringify(entries));
+    } catch (error) {
+      logInternalWarn("offlineStore.writeManifest failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
-  void setAppSetting(MANIFEST_KEY, entries);
+  if (typeof window !== "undefined") {
+    void setAppSetting(MANIFEST_KEY, entries);
+  }
 }
 
 function setState(next: Partial<OfflineState>): void {
@@ -166,6 +172,7 @@ export function reconcileManifest(
  * data directory can be cleared out from underneath us.
  */
 export async function hydrateOfflineStore(): Promise<void> {
+  if (typeof window === "undefined") return;
   if (hydrated) return;
   hydrated = true;
 
@@ -198,6 +205,7 @@ export async function hydrateOfflineStore(): Promise<void> {
  * track id would be state that can never hold more than one entry.
  */
 export function startOfflineProgressFeed(): void {
+  if (typeof window === "undefined") return;
   void listen<{ trackId: string; percent: number }>("offline-download-progress", (event) => {
     if (event.payload.trackId !== state.downloadingId) return;
     setState({ progress: event.payload.percent });

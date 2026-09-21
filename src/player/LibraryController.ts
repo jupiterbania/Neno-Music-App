@@ -41,6 +41,8 @@ import {
   removeLocalPlaylistTrack,
   removeLocalTrackFromPlaylist,
 } from "./localPlaylists";
+import { queueDownload } from "./offlineStore";
+import { readAutoDownloadLikedEnabled } from "../ui/settings/autoDownloadLiked";
 
 export type LibraryStatus = "restoring" | "signed-out" | "authorizing" | "loading" | "ready" | "error";
 
@@ -286,7 +288,12 @@ export class LibraryController {
     try {
       const cachedLibrary = await this.dataSource.getCachedLibrary?.();
       if (cachedLibrary) {
-        this.setState({ library: cachedLibrary, error: null });
+        this.setState({
+          status: cachedLibrary.account ? "ready" : "signed-out",
+          library: cachedLibrary,
+          error: null,
+          sessionConfirmedAt: cachedLibrary.account ? (this.state.sessionConfirmedAt ?? Date.now()) : null,
+        });
       }
 
       /*
@@ -295,14 +302,24 @@ export class LibraryController {
        * sign-in webview's own Google session is still perfectly alive — so the durable record is
        * asked before the user is. Costs a hidden window on a path that was otherwise a prompt.
        */
-      const restored = await this.dataSource.restoreSession?.()
-        || await this.dataSource.refreshSession?.();
+      const restored = await this.dataSource.restoreSession?.();
       if (!restored) {
-        this.setState({ status: "signed-out", authPrompt: null, error: null });
-        return;
+        const renewed = await this.dataSource.refreshSession?.();
+        if (!renewed) {
+          this.setState({
+            status: "signed-out",
+            library: cachedLibrary?.account ? null : (cachedLibrary ?? null),
+            authPrompt: null,
+            error: null,
+          });
+          return;
+        }
       }
-      this.setState({ sessionConfirmedAt: this.state.sessionConfirmedAt ?? Date.now() });
-      await this.refresh();
+      this.setState({
+        status: "ready",
+        sessionConfirmedAt: this.state.sessionConfirmedAt ?? Date.now(),
+      });
+      void this.refresh();
     } catch (error) {
       /*
        * An expired credential at startup is not a "failure" in the crash sense — it is the
@@ -497,11 +514,14 @@ export class LibraryController {
 
   async refresh(options: { suppressFailure?: boolean } = {}): Promise<void> {
     if (!this.dataSource.getLibrary) return;
-    this.setState({ status: "loading", authPrompt: null, error: null });
+    if (!this.state.library) {
+      this.setState({ status: "loading", authPrompt: null, error: null });
+    }
     try {
       const library = await withTimeout(
         this.dataSource.getLibrary(
           (updatedLibrary) => {
+            if (this.state.status === "signed-out") return;
             this.setState({ status: "ready", library: updatedLibrary, authPrompt: null, error: null });
           },
           (error) => {
@@ -538,6 +558,7 @@ export class LibraryController {
   }
 
   private applyLibrary(library: LibrarySnapshot): void {
+    if (this.state.status === "signed-out") return;
     this.setState({
       status: "ready",
       library,
@@ -1115,6 +1136,14 @@ export class LibraryController {
       library: { ...previousLibrary, likedSongs },
       pendingLikeTrackIds,
     });
+
+    if (rating === "like" && readAutoDownloadLikedEnabled()) {
+      try {
+        queueDownload(track);
+      } catch {
+        // Non-fatal if offline queueing fails
+      }
+    }
 
     try {
       await applyRating(rating);

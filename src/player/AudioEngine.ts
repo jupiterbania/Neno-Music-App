@@ -1297,7 +1297,9 @@ export class AudioEngine {
       if (engine !== this) engine.pauseForPlaybackClaim();
     }
     for (const media of document.querySelectorAll<HTMLMediaElement>("audio, video")) {
-      media.pause();
+      if (media !== this.audio) {
+        media.pause();
+      }
     }
 
     return claimId;

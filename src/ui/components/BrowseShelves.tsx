@@ -158,8 +158,8 @@ export function BrowseShelves({
   const { openTrackMenu } = useTrackContextMenu();
   const { openPlaylistMenu, openAlbumMenu } = usePlaylistContextMenu();
 
-  const playShelfTrack = (shelfTracks: Track[], track: Track) => {
-    void playerController.playTrackById(track.id, shelfTracks);
+  const playShelfTrack = (_shelfTracks: Track[], track: Track) => {
+    void playerController.playTrackById(track.id);
   };
 
   return (
