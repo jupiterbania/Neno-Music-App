@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import type { Album, Artist, Playlist, Track } from "../../datasource/types";
+import type { Album, Artist, Playlist, SpeedDialItem, Track } from "../../datasource/types";
 import type { LibraryController, LibraryState } from "../../player/LibraryController";
 import type { PlayerControllerActions } from "../../player/playerStore";
 import { ArrowLeftIcon, MenuDotsIcon, PlayActiveIcon, ShuffleIcon } from "../icons";
@@ -13,6 +13,7 @@ interface SpeedDialPageProps {
   playerController: PlayerControllerActions;
   libraryController: LibraryController;
   libraryState: LibraryState;
+  speedDialItems?: readonly SpeedDialItem[];
   speedDialTracks?: readonly Track[];
   onBack: () => void;
   onOpenAlbum?: (album: Album) => void;
@@ -24,37 +25,62 @@ export function SpeedDialPage({
   playerController,
   libraryController: _libraryController,
   libraryState,
+  speedDialItems: customItems,
   speedDialTracks: customTracks,
   onBack,
-  onOpenAlbum: _onOpenAlbum,
-  onOpenArtist: _onOpenArtist,
-  onOpenPlaylist: _onOpenPlaylist,
+  onOpenAlbum,
+  onOpenArtist,
+  onOpenPlaylist,
 }: SpeedDialPageProps) {
   const { currentTrackId, isPlaying } = useNowPlaying();
   const { openTrackMenu } = useTrackContextMenu();
 
   const account = libraryState.library?.account;
 
-  // Derive all speed dial tracks from custom prop, recentlyPlayed, etc.
-  const tracks = useMemo<Track[]>(() => {
-    if (customTracks && customTracks.length > 0) {
-      return [...customTracks];
+  // Derive all speed dial items
+  const items = useMemo<SpeedDialItem[]>(() => {
+    if (customItems && customItems.length > 0) {
+      return [...customItems];
     }
-    return libraryState.library?.recentlyPlayed ?? [];
-  }, [customTracks, libraryState.library?.recentlyPlayed]);
+    if (customTracks && customTracks.length > 0) {
+      return customTracks.map((track) => ({ kind: "track" as const, item: track }));
+    }
+    const historyTracks = libraryState.library?.recentlyPlayed ?? [];
+    return historyTracks.map((track) => ({ kind: "track" as const, item: track }));
+  }, [customItems, customTracks, libraryState.library?.recentlyPlayed]);
+
+  // Extract all tracks for Play All / Shuffle
+  const allTracks = useMemo<Track[]>(() => {
+    return items
+      .filter((entry): entry is { kind: "track"; item: Track } => entry.kind === "track")
+      .map((entry) => entry.item);
+  }, [items]);
 
   const playAll = (shuffle = false) => {
-    if (tracks.length === 0) return;
+    if (allTracks.length === 0) return;
     if (shuffle) {
-      const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+      const shuffled = [...allTracks].sort(() => Math.random() - 0.5);
       void playerController.playTrackById(shuffled[0].id, shuffled, true);
     } else {
-      void playerController.playTrackById(tracks[0].id, tracks, true);
+      void playerController.playTrackById(allTracks[0].id, allTracks, true);
     }
   };
 
-  const playTrack = (track: Track) => {
-    void playerController.playTrackById(track.id);
+  const handleItemClick = (entry: SpeedDialItem) => {
+    switch (entry.kind) {
+      case "track":
+        void playerController.playTrackById(entry.item.id);
+        break;
+      case "album":
+        onOpenAlbum?.(entry.item);
+        break;
+      case "playlist":
+        onOpenPlaylist?.(entry.item);
+        break;
+      case "artist":
+        onOpenArtist?.(entry.item);
+        break;
+    }
   };
 
   return (
@@ -76,7 +102,7 @@ export function SpeedDialPage({
         </div>
 
         <div className="flex items-center gap-3">
-          {tracks.length > 0 && (
+          {allTracks.length > 0 && (
             <button
               type="button"
               onClick={() => playAll(true)}
@@ -96,46 +122,77 @@ export function SpeedDialPage({
         </div>
       </header>
 
-      {/* ── Grid of Songs ──────────────────────────────────────────────── */}
-      {tracks.length === 0 ? (
+      {/* ── Grid of Mixed Speed Dial Items ─────────────────────────────── */}
+      {items.length === 0 ? (
         <div className="flex min-h-[40vh] flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-          <p className="text-base font-semibold text-foreground">No speed dial songs yet</p>
-          <p className="text-xs">Songs you listen to on YouTube Music will appear here.</p>
+          <p className="text-base font-semibold text-foreground">No speed dial items yet</p>
+          <p className="text-xs">Songs, albums and artists you listen to on YouTube Music will appear here.</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3.5 sm:gap-5 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-          {tracks.map((track) => {
-            const isCurrent = currentTrackId === track.id;
+          {items.map((entry, index) => {
+            const isTrack = entry.kind === "track";
+            const isArtist = entry.kind === "artist";
+            const isAlbum = entry.kind === "album";
+            const isPlaylist = entry.kind === "playlist";
+
+            const title = isArtist ? entry.item.name : entry.item.title;
+            const isCurrent = isTrack && currentTrackId === entry.item.id;
+
+            let subtitle = "Song";
+            if (isTrack) {
+              subtitle = `Song • ${entry.item.artist || "Unknown Artist"}`;
+            } else if (isAlbum) {
+              subtitle = `Album • ${entry.item.artist || "Unknown Artist"}`;
+            } else if (isPlaylist) {
+              subtitle = `Playlist • ${entry.item.owner || "YouTube Music"}`;
+            } else if (isArtist) {
+              subtitle = "Artist";
+            }
 
             return (
               <div
-                key={track.id}
+                key={`${entry.kind}-${entry.item.id || index}`}
                 role="button"
                 tabIndex={0}
-                onClick={() => playTrack(track)}
-                onMouseEnter={() => playerController.warmTrack(track)}
-                onTouchStart={() => playerController.warmTrack(track)}
+                onClick={() => handleItemClick(entry)}
+                onMouseEnter={() => {
+                  if (isTrack) playerController.warmTrack(entry.item);
+                }}
+                onTouchStart={() => {
+                  if (isTrack) playerController.warmTrack(entry.item);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    playTrack(track);
+                    handleItemClick(entry);
                   }
                 }}
-                onContextMenu={(e) => openTrackMenu(e, track)}
+                onContextMenu={(e) => {
+                  if (isTrack) openTrackMenu(e, entry.item);
+                }}
                 className="group flex flex-col gap-2 rounded-2xl p-2 select-none cursor-pointer text-left transition-all duration-150 hover:bg-card/75 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {/* Square Artwork */}
-                <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-muted/40 shadow-sm border border-white/5">
+                {/* Artwork */}
+                <div
+                  className={cn(
+                    "relative aspect-square w-full overflow-hidden bg-muted/40 shadow-sm border border-white/5",
+                    isArtist ? "rounded-full" : "rounded-2xl",
+                  )}
+                >
                   <TrackArtwork
-                    artworkUrl={track.artworkUrl}
+                    artworkUrl={entry.item.artworkUrl}
                     size={280}
                     iconSize={36}
-                    variant="album"
-                    className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    variant={isArtist ? "artist" : "album"}
+                    className={cn(
+                      "size-full object-cover transition-transform duration-300 group-hover:scale-105",
+                      isArtist && "rounded-full",
+                    )}
                   />
 
-                  {/* Playing Pulse or Hover Play Button */}
-                  {isCurrent && isPlaying ? (
+                  {/* Playing Pulse or Hover Play Button for Track */}
+                  {isTrack && isCurrent && isPlaying ? (
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                       <div className="size-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg animate-pulse">
                         <PlayActiveIcon size={20} className="translate-x-0.5" />
@@ -159,24 +216,26 @@ export function SpeedDialPage({
                         isCurrent ? "text-primary" : "text-foreground group-hover:text-primary",
                       )}
                     >
-                      {track.title}
+                      {title}
                     </span>
                     <span className="truncate text-xs text-muted-foreground">
-                      Song • {track.artist || "Unknown Artist"}
+                      {subtitle}
                     </span>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openTrackMenu(e, track);
-                    }}
-                    className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground active:scale-90 transition-all opacity-80 sm:opacity-0 sm:group-hover:opacity-100"
-                    aria-label="More options"
-                  >
-                    <MenuDotsIcon size={16} />
-                  </button>
+                  {isTrack && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openTrackMenu(e, entry.item);
+                      }}
+                      className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground active:scale-90 transition-all opacity-80 sm:opacity-0 sm:group-hover:opacity-100"
+                      aria-label="More options"
+                    >
+                      <MenuDotsIcon size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
             );

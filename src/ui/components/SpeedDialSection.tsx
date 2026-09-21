@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import type { AccountProfile, Track } from "../../datasource/types";
+import type { AccountProfile, Album, Artist, Playlist, SpeedDialItem, Track } from "../../datasource/types";
 import type { PlayerControllerActions } from "../../player/playerStore";
 import { ChevronRightIcon, PlayActiveIcon } from "../icons";
 import { AccountAvatar } from "./AccountSwitcher";
@@ -8,10 +8,14 @@ import { TrackArtwork } from "./TrackArtwork";
 import { useTrackContextMenu } from "./TrackContextMenu";
 
 interface SpeedDialSectionProps {
-  tracks: readonly Track[];
+  items?: readonly SpeedDialItem[];
+  tracks?: readonly Track[];
   account?: AccountProfile | null;
   playerController: PlayerControllerActions;
   onOpenSpeedDial?: () => void;
+  onOpenAlbum?: (album: Album) => void;
+  onOpenPlaylist?: (playlist: Playlist) => void;
+  onOpenArtist?: (artist: Artist) => void;
   isLoading?: boolean;
   className?: string;
 }
@@ -20,10 +24,14 @@ const ITEMS_PER_PAGE = 9;
 const MAX_SPEED_DIAL_ITEMS = 27;
 
 export function SpeedDialSection({
+  items: customItems,
   tracks,
   account,
   playerController,
   onOpenSpeedDial,
+  onOpenAlbum,
+  onOpenPlaylist,
+  onOpenArtist,
   isLoading = false,
   className,
 }: SpeedDialSectionProps) {
@@ -31,22 +39,30 @@ export function SpeedDialSection({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [currentPage, setCurrentPage] = useState(0);
 
-  // Sliced items up to 27 (3 pages of 9)
-  const speedDialTracks = useMemo(
-    () => tracks.slice(0, MAX_SPEED_DIAL_ITEMS),
-    [tracks],
-  );
+  // Normalize into SpeedDialItem list
+  const speedDialItems = useMemo<SpeedDialItem[]>(() => {
+    if (customItems && customItems.length > 0) {
+      return customItems.slice(0, MAX_SPEED_DIAL_ITEMS);
+    }
+    if (tracks && tracks.length > 0) {
+      return tracks.slice(0, MAX_SPEED_DIAL_ITEMS).map((track) => ({
+        kind: "track" as const,
+        item: track,
+      }));
+    }
+    return [];
+  }, [customItems, tracks]);
 
-  const totalPages = Math.max(1, Math.ceil(speedDialTracks.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(speedDialItems.length / ITEMS_PER_PAGE));
 
-  // Chunk into pages of 9 items
+  // Chunk into pages of 9 items (3x3)
   const pages = useMemo(() => {
-    const chunks: Track[][] = [];
-    for (let i = 0; i < speedDialTracks.length; i += ITEMS_PER_PAGE) {
-      chunks.push(speedDialTracks.slice(i, i + ITEMS_PER_PAGE));
+    const chunks: SpeedDialItem[][] = [];
+    for (let i = 0; i < speedDialItems.length; i += ITEMS_PER_PAGE) {
+      chunks.push(speedDialItems.slice(i, i + ITEMS_PER_PAGE));
     }
     return chunks;
-  }, [speedDialTracks]);
+  }, [speedDialItems]);
 
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
@@ -65,11 +81,24 @@ export function SpeedDialSection({
     setCurrentPage(pageIndex);
   };
 
-  const playTrack = (track: Track) => {
-    void playerController.playTrackById(track.id);
+  const handleItemClick = (speedDialItem: SpeedDialItem) => {
+    switch (speedDialItem.kind) {
+      case "track":
+        void playerController.playTrackById(speedDialItem.item.id);
+        break;
+      case "album":
+        onOpenAlbum?.(speedDialItem.item);
+        break;
+      case "playlist":
+        onOpenPlaylist?.(speedDialItem.item);
+        break;
+      case "artist":
+        onOpenArtist?.(speedDialItem.item);
+        break;
+    }
   };
 
-  if (!isLoading && speedDialTracks.length === 0) {
+  if (!isLoading && speedDialItems.length === 0) {
     return null;
   }
 
@@ -128,55 +157,96 @@ export function SpeedDialSection({
                 key={`speed-dial-page-${pageIdx}`}
                 className="w-full shrink-0 snap-start grid grid-cols-3 grid-rows-3 gap-2 sm:gap-3"
               >
-                {pageItems.map((track) => (
-                  <div
-                    key={track.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => playTrack(track)}
-                    onMouseEnter={() => playerController.warmTrack(track)}
-                    onTouchStart={() => playerController.warmTrack(track)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        playTrack(track);
-                      }
-                    }}
-                    onContextMenu={(e) => openTrackMenu(e, track)}
-                    className={cn(
-                      "group relative aspect-square w-full rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer select-none",
-                      "border border-white/5 bg-card/80 transition-all duration-200",
-                      "hover:border-white/20 hover:shadow-lg active:scale-[0.97]",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    )}
-                  >
-                    {/* Artwork */}
-                    <TrackArtwork
-                      artworkUrl={track.artworkUrl}
-                      size={240}
-                      iconSize={32}
-                      variant="album"
-                      className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
+                {pageItems.map((entry, entryIdx) => {
+                  const isTrack = entry.kind === "track";
+                  const isArtist = entry.kind === "artist";
+                  const isAlbum = entry.kind === "album";
+                  const isPlaylist = entry.kind === "playlist";
 
-                    {/* Gradient Overlay for Readability */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent pointer-events-none" />
+                  const title = isArtist
+                    ? entry.item.name
+                    : entry.item.title;
 
-                    {/* Desktop Play Overlay Icon */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-                      <div className="size-10 rounded-full bg-primary/95 text-primary-foreground flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
-                        <PlayActiveIcon size={18} className="translate-x-0.5" />
+                  const artworkUrl = entry.item.artworkUrl;
+
+                  let badgeLabel: string | null = null;
+                  if (isAlbum) badgeLabel = "Album";
+                  else if (isPlaylist) badgeLabel = "Playlist";
+                  else if (isArtist) badgeLabel = "Artist";
+
+                  return (
+                    <div
+                      key={`${entry.kind}-${entry.item.id || entryIdx}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleItemClick(entry)}
+                      onMouseEnter={() => {
+                        if (isTrack) playerController.warmTrack(entry.item);
+                      }}
+                      onTouchStart={() => {
+                        if (isTrack) playerController.warmTrack(entry.item);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleItemClick(entry);
+                        }
+                      }}
+                      onContextMenu={(e) => {
+                        if (isTrack) openTrackMenu(e, entry.item);
+                      }}
+                      className={cn(
+                        "group relative aspect-square w-full overflow-hidden cursor-pointer select-none",
+                        isArtist ? "rounded-2xl sm:rounded-3xl" : "rounded-xl sm:rounded-2xl",
+                        "border border-white/5 bg-card/80 transition-all duration-200",
+                        "hover:border-white/20 hover:shadow-lg active:scale-[0.97]",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      )}
+                    >
+                      {/* Artwork */}
+                      <div className="size-full overflow-hidden">
+                        <TrackArtwork
+                          artworkUrl={artworkUrl}
+                          size={240}
+                          iconSize={32}
+                          variant={isArtist ? "artist" : "album"}
+                          className={cn(
+                            "size-full object-cover transition-transform duration-300 group-hover:scale-105",
+                            isArtist && "scale-[0.92] rounded-full",
+                          )}
+                        />
+                      </div>
+
+                      {/* Gradient Overlay for Readability */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent pointer-events-none" />
+
+                      {/* Top Badge for Album/Playlist/Artist */}
+                      {badgeLabel && (
+                        <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 pointer-events-none">
+                          <span className="px-1.5 py-0.5 rounded-md bg-black/60 backdrop-blur-xs text-[9px] sm:text-[10px] font-medium text-white/90 uppercase tracking-wider border border-white/10">
+                            {badgeLabel}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Desktop Play Overlay Icon for Track */}
+                      {isTrack && (
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                          <div className="size-10 rounded-full bg-primary/95 text-primary-foreground flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
+                            <PlayActiveIcon size={18} className="translate-x-0.5" />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Title Text */}
+                      <div className="absolute bottom-2 left-2 right-2 sm:bottom-2.5 sm:left-2.5 sm:right-2.5 pointer-events-none">
+                        <span className="line-clamp-2 text-xs sm:text-sm font-bold text-white leading-tight drop-shadow-md tracking-tight">
+                          {title}
+                        </span>
                       </div>
                     </div>
-
-                    {/* Title Text */}
-                    <div className="absolute bottom-2 left-2 right-2 sm:bottom-2.5 sm:left-2.5 sm:right-2.5 pointer-events-none">
-                      <span className="line-clamp-2 text-xs sm:text-sm font-bold text-white leading-tight drop-shadow-md tracking-tight">
-                        {track.title}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ))
           )}

@@ -6231,26 +6231,33 @@ export class YouTubeMusicDataSource extends DataSource {
           playlists: [],
           artists: [],
           links: [],
+          items: [],
         };
         const preferredSongOrVideo = new Set(this.songOrVideoItems(loose));
         for (const item of loose) {
           const track = preferredSongOrVideo.has(item) ? this.toTrack(item) : null;
           if (track) {
             shelf.tracks.push(track);
+            shelf.items?.push({ kind: "track", item: track });
             continue;
           }
           const album = item.item_type === "album" ? this.toAlbum(item) : null;
           if (album) {
             shelf.albums.push(album);
+            shelf.items?.push({ kind: "album", item: album });
             continue;
           }
           const playlist = item.item_type === "playlist" ? this.toPlaylist(item) : null;
           if (playlist) {
             shelf.playlists.push(playlist);
+            shelf.items?.push({ kind: "playlist", item: playlist });
             continue;
           }
           const artist = item.item_type === "artist" ? this.toArtist(item) : null;
-          if (artist) shelf.artists.push(artist);
+          if (artist) {
+            shelf.artists.push(artist);
+            shelf.items?.push({ kind: "artist", item: artist });
+          }
         }
         shelves.push(shelf);
         logInternalWarn("YouTubeMusicDataSource.refreshBrowsePage using flat fallback", {
@@ -6560,6 +6567,7 @@ export class YouTubeMusicDataSource extends DataSource {
       playlists: [],
       artists: [],
       links,
+      items: [],
     };
 
     for (const item of this.collectMusicItems(node, BROWSE_ITEM_TYPES)) {
@@ -6567,22 +6575,34 @@ export class YouTubeMusicDataSource extends DataSource {
         case "song":
         case "video": {
           const track = this.toTrack(item);
-          if (track) shelf.tracks.push(track);
+          if (track) {
+            shelf.tracks.push(track);
+            shelf.items?.push({ kind: "track", item: track });
+          }
           break;
         }
         case "album": {
           const album = this.toAlbum(item);
-          if (album) shelf.albums.push(album);
+          if (album) {
+            shelf.albums.push(album);
+            shelf.items?.push({ kind: "album", item: album });
+          }
           break;
         }
         case "playlist": {
           const playlist = this.toPlaylist(item);
-          if (playlist) shelf.playlists.push(playlist);
+          if (playlist) {
+            shelf.playlists.push(playlist);
+            shelf.items?.push({ kind: "playlist", item: playlist });
+          }
           break;
         }
         case "artist": {
           const artist = this.toArtist(item);
-          if (artist) shelf.artists.push(artist);
+          if (artist) {
+            shelf.artists.push(artist);
+            shelf.items?.push({ kind: "artist", item: artist });
+          }
           break;
         }
         default:

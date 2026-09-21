@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CylinderCarousel } from "@/components/motion/cylinder-carousel";
 import { PlayActiveIcon, RefreshIcon } from "@/ui/icons";
 import { cn } from "@/lib/utils";
-import type { Album, Artist, BrowsePage, Playlist, Track } from "../../datasource/types";
+import type { Album, Artist, BrowsePage, Playlist, SpeedDialItem, Track } from "../../datasource/types";
 import type { LibraryController, LibraryState } from "../../player/LibraryController";
 import type { PlayerControllerActions } from "../../player/playerStore";
 import type { SearchController } from "../../player/SearchController";
@@ -133,7 +133,7 @@ interface HomePageProps {
   destinations: HomeDestinationHandlers;
   onOpenSearch?: () => void;
   onOpenSettings?: () => void;
-  onOpenSpeedDial?: () => void;
+  onOpenSpeedDial?: (items?: SpeedDialItem[]) => void;
   onOpenAlbum?: (album: Album) => void;
   onOpenArtist?: (artist: Artist) => void;
   onOpenPlaylist?: (playlist: Playlist) => void;
@@ -247,9 +247,59 @@ export function HomePage({
     return ytmHomeFeed?.shelves.find((shelf) => isSpeedDialOrListenAgainTitle(shelf.title)) ?? null;
   }, [ytmHomeFeed]);
 
-  const speedDialTracks = useMemo(() => {
-    const fromShelf = speedDialShelf?.tracks ?? [];
-    return uniqueTracks([...fromShelf, ...recentPlays]);
+  const speedDialItems = useMemo<SpeedDialItem[]>(() => {
+    const items: SpeedDialItem[] = [];
+    const seenKeys = new Set<string>();
+
+    if (speedDialShelf?.items && speedDialShelf.items.length > 0) {
+      for (const entry of speedDialShelf.items) {
+        const id = entry.item.id;
+        const key = `${entry.kind}:${id}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          items.push(entry);
+        }
+      }
+    } else if (speedDialShelf) {
+      for (const track of speedDialShelf.tracks) {
+        const key = `track:${track.id}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          items.push({ kind: "track", item: track });
+        }
+      }
+      for (const album of speedDialShelf.albums) {
+        const key = `album:${album.id}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          items.push({ kind: "album", item: album });
+        }
+      }
+      for (const playlist of speedDialShelf.playlists) {
+        const key = `playlist:${playlist.id}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          items.push({ kind: "playlist", item: playlist });
+        }
+      }
+      for (const artist of speedDialShelf.artists) {
+        const key = `artist:${artist.id}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          items.push({ kind: "artist", item: artist });
+        }
+      }
+    }
+
+    for (const track of recentPlays) {
+      const key = `track:${track.id}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        items.push({ kind: "track", item: track });
+      }
+    }
+
+    return items;
   }, [speedDialShelf, recentPlays]);
 
   const hasYtmListenAgain = useMemo(
@@ -630,13 +680,16 @@ export function HomePage({
       {showMadeForYou && madeForYouSection}
 
       {/* ── 2. Speed dial (Only when signed in) ─────────────────────────── */}
-      {libraryState.status === "ready" && speedDialTracks.length > 0 && (
+      {libraryState.status === "ready" && speedDialItems.length > 0 && (
         <SpeedDialSection
-          tracks={speedDialTracks}
+          items={speedDialItems}
           account={libraryState.library?.account}
           playerController={playerController}
-          onOpenSpeedDial={onOpenSpeedDial}
-          isLoading={isLoadingHomeFeed && speedDialTracks.length === 0}
+          onOpenSpeedDial={() => onOpenSpeedDial?.(speedDialItems)}
+          onOpenAlbum={onOpenAlbum}
+          onOpenPlaylist={onOpenPlaylist}
+          onOpenArtist={onOpenArtist}
+          isLoading={isLoadingHomeFeed && speedDialItems.length === 0}
         />
       )}
 

@@ -1,4 +1,4 @@
-import type { Album, Artist, Playlist, SearchResults, Track } from "../../datasource/types";
+import type { Album, Artist, Playlist, SearchResults, SpeedDialItem, Track } from "../../datasource/types";
 
 export type TabView = "home" | "album" | "artist" | "playlist" | "related" | "search" | "history" | "browse" | "library" | "settings" | "speed-dial";
 export type NavigableTabView = Exclude<TabView, "settings">;
@@ -15,6 +15,7 @@ export interface TabViewState {
   searchResults?: Track[];
   mixedSearchResults?: SearchResults;
   searchLoading?: boolean;
+  speedDialItems?: SpeedDialItem[];
 }
 
 export interface TabNavigationHistory {
@@ -36,6 +37,7 @@ export interface Tab {
   searchResults?: Track[];
   mixedSearchResults?: SearchResults;
   searchLoading?: boolean;
+  speedDialItems?: SpeedDialItem[];
   isQueueOpen?: boolean;
   navigationHistory?: TabNavigationHistory;
 }

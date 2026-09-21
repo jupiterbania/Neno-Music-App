@@ -474,10 +474,20 @@ export class PlayerController {
 
       // When a single track is explicitly played without a queue (e.g. clicking a card in Speed Dial,
       // Search results, Home picks), seed a new queue with this track so upcoming recommendations match it.
-      if (!playbackQueue?.length && this.queue.current?.id !== track.id) {
-        this.isPlaylistMode = false;
-        this.autoplayEnabled = true;
-        this.queue.set([track], 0);
+      let isNewQueueSeed = false;
+      if (!playbackQueue?.length) {
+        const isCurrent = this.queue.current?.id === track.id;
+        if (!isCurrent) {
+          const existingIndex = this.queue.all.findIndex((t) => t.id === track.id);
+          if (existingIndex >= 0) {
+            this.queue.select(existingIndex);
+          } else {
+            this.isPlaylistMode = false;
+            this.autoplayEnabled = true;
+            this.queue.set([track], 0);
+            isNewQueueSeed = true;
+          }
+        }
       }
 
       this.loadedTrackId = null;
@@ -490,12 +500,7 @@ export class PlayerController {
         shuffleEnabled: this.shuffleEnabled,
       });
       if (this.autoplayEnabled && !this.isPlaylistMode) {
-        /*
-         * forceRefresh=true: the user explicitly chose this track, so the radio queue behind
-         * it must always be seeded from a fresh YouTube Music API call — not a cached list
-         * that might have been stored days ago or built for a different playback context.
-         */
-        this.refillAutomaticQueue(true);
+        this.refillAutomaticQueue(isNewQueueSeed);
       }
       await this.ensureTrackLoaded(track);
       if (requestId !== this.playTrackRequestId) return false;
@@ -1094,7 +1099,7 @@ export class PlayerController {
    * rather than a stale cache from a previous session.
    */
   private refillAutomaticQueue(forceRefresh = false): void {
-    if (!forceRefresh && this.queue.remainingAutomatic >= 10) return;
+    if (!forceRefresh && this.queue.remainingAutomatic >= 5) return;
 
     if (this.isPlaylistMode) {
       return;
@@ -1175,7 +1180,11 @@ export class PlayerController {
       return;
     }
 
-    this.queue.replaceAutomaticUpcoming(recommendations);
+    if (forceRefresh || this.queue.remainingAutomatic === 0) {
+      this.queue.replaceAutomaticUpcoming(recommendations);
+    } else {
+      this.queue.appendAutomaticTracks(recommendations);
+    }
     logInternalInfo("PlayerController.primeRadioQueue success", {
       seedTrackId: seed.id,
       trackCount: recommendations.length,

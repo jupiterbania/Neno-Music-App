@@ -160,6 +160,14 @@ export interface BrowseLink {
   params?: string;
 }
 
+export type SpeedDialItem =
+  | { kind: "track"; item: Track }
+  | { kind: "album"; item: Album }
+  | { kind: "playlist"; item: Playlist }
+  | { kind: "artist"; item: Artist };
+
+export type BrowseShelfItem = SpeedDialItem;
+
 /** One titled row on a browse page. Contents are whatever that row actually holds. */
 export interface BrowseShelf {
   title: string;
@@ -169,6 +177,8 @@ export interface BrowseShelf {
   artists: Artist[];
   /** Mood and genre chips, which lead to further feeds rather than to content. */
   links: BrowseLink[];
+  /** Ordered list of mixed items in the shelf (preserving YouTube Music order) */
+  items?: BrowseShelfItem[];
 }
 
 export interface BrowsePage {

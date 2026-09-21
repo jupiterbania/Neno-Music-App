@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { invoke } from "@tauri-apps/api/core";
-import type { Album, Artist, Playlist, SearchResults, Track } from "../datasource/types";
+import type { Album, Artist, Playlist, SearchResults, SpeedDialItem, Track } from "../datasource/types";
 import { looksLikeYouTubeLink } from "../datasource/youtube/links";
 import { useDisableContextMenu } from "./hooks/useDisableContextMenu";
 import { HomePage } from "./pages/HomePage";
@@ -191,6 +191,7 @@ function getNavigationState(tab: Tab): TabViewState | null {
     searchResults: tab.searchResults,
     mixedSearchResults: tab.mixedSearchResults,
     searchLoading: tab.searchLoading,
+    speedDialItems: tab.speedDialItems,
   };
 }
 
@@ -232,6 +233,7 @@ function applyNavigationState(tab: Tab, state: TabViewState): Tab {
     searchResults: state.searchResults,
     mixedSearchResults: state.mixedSearchResults,
     searchLoading: state.searchLoading,
+    speedDialItems: state.speedDialItems,
   };
 }
 
@@ -944,11 +946,12 @@ export default function App() {
     });
   };
 
-  const handleNavigateSpeedDial = () => {
+  const handleNavigateSpeedDial = (items?: SpeedDialItem[]) => {
     playerUIStore.setLyricsOpen(false);
     navigateTab(activeTabId, {
       title: "Speed dial",
       view: "speed-dial",
+      speedDialItems: items,
     });
   };
 
@@ -2193,6 +2196,7 @@ export default function App() {
                 playerController={playerController}
                 libraryController={libraryController}
                 libraryState={libraryState}
+                speedDialItems={activeTab.speedDialItems}
                 onBack={handleNavigateBack}
                 onOpenAlbum={handleNavigateAlbum}
                 onOpenArtist={handleNavigateArtist}

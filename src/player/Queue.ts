@@ -106,8 +106,11 @@ export class Queue {
       this.index = 0;
       return;
     }
-    const manualQueueEnd = this.index + 1 + this.manualQueueLength;
-    this.items = [...this.items.slice(0, manualQueueEnd), ...tracks];
+    const existingIds = new Set(this.items.map((t) => t.id));
+    const newTracks = tracks.filter((t) => !existingIds.has(t.id));
+    if (newTracks.length > 0) {
+      this.items = [...this.items, ...newTracks];
+    }
   }
 
   replaceAutomaticUpcoming(tracks: Track[]): void {
