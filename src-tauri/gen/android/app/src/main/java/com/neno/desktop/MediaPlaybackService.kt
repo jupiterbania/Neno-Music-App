@@ -202,18 +202,16 @@ class MediaPlaybackService : Service() {
     private val serviceKeepaliveRunnable = object : Runnable {
         override fun run() {
             try {
-                if (isPlaying) {
-                    MainActivity.instance?.let { act ->
-                        act.runOnUiThread {
-                            act.targetWebView?.let { wv ->
-                                wv.resumeTimers()
-                                wv.evaluateJavascript("void 0;", null)
-                            }
+                MainActivity.instance?.let { act ->
+                    act.runOnUiThread {
+                        act.targetWebView?.let { wv ->
+                            wv.resumeTimers()
+                            wv.evaluateJavascript("void 0;", null)
                         }
                     }
                 }
             } catch (_: Throwable) {}
-            serviceKeepaliveHandler.postDelayed(this, 2500)
+            serviceKeepaliveHandler.postDelayed(this, 1000)
         }
     }
 

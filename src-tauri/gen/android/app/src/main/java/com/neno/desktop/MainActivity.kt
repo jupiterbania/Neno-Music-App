@@ -68,7 +68,7 @@ class MainActivity : TauriActivity() {
                 wv.resumeTimers()
                 wv.evaluateJavascript("void 0;", null)
             }
-            backgroundKeepaliveHandler.postDelayed(this, 3500)
+            backgroundKeepaliveHandler.postDelayed(this, 1000)
         }
     }
     private var backgroundKeepaliveActive = false
