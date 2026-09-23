@@ -35,6 +35,7 @@ const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 type CachedMinter = { minter: WebPoMinter; expiresAt: number };
 
 let cached: Promise<CachedMinter> | null = null;
+let lastWorkingMinter: WebPoMinter | null = null;
 
 /*
  * On Android WebView, cross-origin POST requests to Google RPC endpoints are blocked by CORS.
@@ -116,6 +117,7 @@ async function attest(): Promise<CachedMinter> {
   }
 
   const minter = await WebPoMinter.create({ integrityToken }, webPoSignalOutput);
+  lastWorkingMinter = minter;
   const ttlMs = (estimatedTtlSecs ?? FALLBACK_TTL_SECONDS) * 1000;
   const expiresAt = Date.now() + Math.max(ttlMs - REFRESH_MARGIN_MS, 0);
 
@@ -193,6 +195,17 @@ export async function mintPoToken(contentBinding: string): Promise<string | unde
     const entry = await Promise.race([entryPromise, timeoutPromise]);
     return await entry.minter.mintAsWebsafeString(contentBinding);
   } catch (error) {
+    if (lastWorkingMinter) {
+      try {
+        const fallbackToken = await lastWorkingMinter.mintAsWebsafeString(contentBinding);
+        if (fallbackToken) {
+          logInternalInfo("poToken.mint recovered using last working minter", { contentBinding });
+          return fallbackToken;
+        }
+      } catch {
+        // Ignore fallback error
+      }
+    }
     logInternalWarn("poToken.mint failed, continuing without one", {
       message: error instanceof Error ? error.message : String(error),
     });

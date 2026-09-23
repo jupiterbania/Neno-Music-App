@@ -75,6 +75,8 @@ function selectQueueSlice(session: PlayerSession | null) {
     manualQueueLength: session?.manualQueueLength ?? 0,
     stopAfterQueueIndex: session?.stopAfterQueueIndex ?? null,
     queueWindowStart: session?.queueWindowStart ?? 0,
+    queueContext: session?.queueContext ?? null,
+    isPlaylistMode: session?.isPlaylistMode ?? false,
   };
 }
 
@@ -87,6 +89,8 @@ function queueSliceEqual(
     a.manualQueueLength === b.manualQueueLength &&
     a.stopAfterQueueIndex === b.stopAfterQueueIndex &&
     a.queueWindowStart === b.queueWindowStart &&
+    a.queueContext?.title === b.queueContext?.title &&
+    a.isPlaylistMode === b.isPlaylistMode &&
     a.queue.length === b.queue.length &&
     a.queue.every((track, index) => track === b.queue[index])
   );
@@ -347,7 +351,7 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
   const { toggleTrackLike, openPlaylistPicker, openTrackMenu } = useTrackContextMenu();
 
   // Queue state
-  const { queue, queueIndex, queueWindowStart } = usePlayerSessionSelector(
+  const { queue, queueIndex, queueWindowStart, queueContext } = usePlayerSessionSelector(
     selectQueueSlice,
     queueSliceEqual,
   );
@@ -498,11 +502,13 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
     }
   };
 
-  // Header "Playing from" label (matches Image 2's "{Title} Mix")
+  // Header "Playing from" label
   const playingFromTitle =
-    currentTrack?.title
-      ? `${currentTrack.title} Mix`
-      : currentTrack?.album || (currentTrack?.artist ? `${currentTrack.artist} Mix` : "Up Next");
+    queueContext?.title
+      ? (queueContext.type === "radio" ? queueContext.title : queueContext.title)
+      : currentTrack?.title
+      ? `${currentTrack.title} Radio`
+      : currentTrack?.album || (currentTrack?.artist ? `${currentTrack.artist} Radio` : "Up Next");
 
   // Cast click handler - displays "Coming soon" as requested
   const handleCastClick = (e: React.MouseEvent) => {

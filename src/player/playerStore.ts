@@ -1,6 +1,7 @@
 import { useCallback, useRef, useSyncExternalStore } from "react";
 import { YouTubeMusicDataSource } from "../datasource/youtube/YouTubeMusicDataSource";
 import { LibraryController } from "./LibraryController";
+export type { QueueContext } from "./PlayerController";
 import { PlayerController, type PlayerSession, type PlayerState } from "./PlayerController";
 import { SearchController } from "./SearchController";
 import { TabManager } from "./TabManager";
@@ -109,11 +110,13 @@ class ActivePlayerController implements PlayerControllerActions {
     playbackQueue?: Parameters<PlayerController["playTrackById"]>[1],
     autoplayWhenQueueEnds?: Parameters<PlayerController["playTrackById"]>[2],
     shufflePlaylist?: Parameters<PlayerController["playTrackById"]>[3],
+    queueContext?: Parameters<PlayerController["playTrackById"]>[4],
   ) => (await tabManager.claimFocusedPlayer()).playTrackById(
     videoId,
     playbackQueue,
     autoplayWhenQueueEnds,
     shufflePlaylist,
+    queueContext,
   );
   play = () => tabManager.getActivePlayer().play();
   pause = () => tabManager.getActivePlayer().pause();

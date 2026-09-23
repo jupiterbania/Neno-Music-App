@@ -625,7 +625,11 @@ export function PlaylistView({ playlist, playerController, libraryController }: 
   if (!playlist) return null;
 
   const playPlaylistTrack = async (track: Track) => {
-    const started = await playerController.playTrackById(track.id, visibleTracks);
+    const started = await playerController.playTrackById(track.id, visibleTracks, true, false, {
+      type: "playlist",
+      title: playlist.title,
+      id: playlist.id,
+    });
     if (started) markPlaylistPlayed(playlist.id);
   };
 
@@ -654,7 +658,11 @@ export function PlaylistView({ playlist, playerController, libraryController }: 
     const firstTrack = tracks[0];
     if (!firstTrack) return;
 
-    const started = await playerController.playTrackById(firstTrack.id, tracks);
+    const started = await playerController.playTrackById(firstTrack.id, tracks, true, false, {
+      type: "playlist",
+      title: playlist.title,
+      id: playlist.id,
+    });
     if (started) markPlaylistPlayed(playlist.id);
   };
 
@@ -664,7 +672,11 @@ export function PlaylistView({ playlist, playerController, libraryController }: 
 
     // Set before starting, so a very short first track cannot end before the mode applies.
     playerController.setPlaybackOrderMode("repeat-all");
-    const started = await playerController.playTrackById(firstTrack.id, tracks);
+    const started = await playerController.playTrackById(firstTrack.id, tracks, true, false, {
+      type: "playlist",
+      title: playlist.title,
+      id: playlist.id,
+    });
     if (started) markPlaylistPlayed(playlist.id);
   };
 
@@ -679,7 +691,11 @@ export function PlaylistView({ playlist, playerController, libraryController }: 
     const firstTrack = shuffleTracks(tracks)[0];
     if (!firstTrack) return;
 
-    const started = await playerController.playTrackById(firstTrack.id, tracks, false, true);
+    const started = await playerController.playTrackById(firstTrack.id, tracks, false, true, {
+      type: "playlist",
+      title: playlist.title,
+      id: playlist.id,
+    });
     if (!started) return;
     playerController.setShuffleEnabled(true);
     markPlaylistPlayed(playlist.id);

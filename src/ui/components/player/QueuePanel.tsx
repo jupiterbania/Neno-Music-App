@@ -290,6 +290,8 @@ function selectQueueSlice(session: PlayerSession | null) {
     manualQueueLength: session?.manualQueueLength ?? 0,
     stopAfterQueueIndex: session?.stopAfterQueueIndex ?? null,
     queueWindowStart: session?.queueWindowStart ?? 0,
+    queueContext: session?.queueContext ?? null,
+    isPlaylistMode: session?.isPlaylistMode ?? false,
   };
 }
 
@@ -301,6 +303,8 @@ function queueSliceEqual(
     && a.manualQueueLength === b.manualQueueLength
     && a.stopAfterQueueIndex === b.stopAfterQueueIndex
     && a.queueWindowStart === b.queueWindowStart
+    && a.queueContext?.title === b.queueContext?.title
+    && a.isPlaylistMode === b.isPlaylistMode
     && a.queue.length === b.queue.length
     && a.queue.every((track, index) => track === b.queue[index]);
 }
@@ -374,7 +378,7 @@ export function QueuePanel({ onClose }: QueuePanelProps) {
   const isMobile = useIsMobile();
   const rawCollapsed = useQueuePanelCollapsed();
   const collapsed = isMobile ? false : rawCollapsed;
-  const { queue, queueIndex, manualQueueLength, stopAfterQueueIndex, queueWindowStart } =
+  const { queue, queueIndex, manualQueueLength, stopAfterQueueIndex, queueWindowStart, queueContext } =
     usePlayerSessionSelector(selectQueueSlice, queueSliceEqual);
   // `stopAfterQueueIndex` comes off the session window-relative, like `queueIndex`; rebased once
   // here so every comparison against `entry.absoluteIndex` (already absolute) lines up.
@@ -709,8 +713,10 @@ export function QueuePanel({ onClose }: QueuePanelProps) {
 
         {!collapsed && (
           <div className="flex min-w-0 flex-1 flex-col">
-            <h2 className={cn("font-bold text-foreground", isMobile ? "text-base" : "text-sm font-semibold")}>
-              Up next
+            <h2 className={cn("font-bold text-foreground truncate", isMobile ? "text-base" : "text-sm font-semibold")}>
+              {queueContext?.title
+                ? (queueContext.type === "radio" ? queueContext.title : `Playing from ${queueContext.title}`)
+                : "Up next"}
             </h2>
             <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
               <span>{upcomingCount === 0 ? "Nothing queued" : `${upcomingCount} songs`}</span>
@@ -899,7 +905,12 @@ export function QueuePanel({ onClose }: QueuePanelProps) {
           )}
           {automatic.length > 0 && (
             <>
-              {manual.length > 0 && sectionLabel("Up next", automatic.length)}
+              {manual.length > 0 && sectionLabel(
+                queueContext?.title
+                  ? (queueContext.type === "radio" ? "Up next" : `From ${queueContext.title}`)
+                  : "Up next",
+                automatic.length,
+              )}
               {renderRows(automatic.slice(0, visibleAutomaticCount))}
               {automatic.length > visibleAutomaticCount && (
                 <ShowMoreQueueButton

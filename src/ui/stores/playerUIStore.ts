@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useRef, useSyncExternalStore } from "react";
 
 export interface PlayerUIState {
   isSeeking: boolean;
@@ -78,6 +78,31 @@ class PlayerUIStore {
 }
 
 export const playerUIStore = new PlayerUIStore();
+
+export function usePlayerUISelector<T>(
+  selector: (state: PlayerUIState) => T,
+  isEqual: (a: T, b: T) => boolean = Object.is,
+): T {
+  const lastSelectedRef = useRef<T | undefined>(undefined);
+  const selectorRef = useRef(selector);
+  selectorRef.current = selector;
+  const isEqualRef = useRef(isEqual);
+  isEqualRef.current = isEqual;
+
+  const getSnapshot = useCallback(() => {
+    const nextSelected = selectorRef.current(playerUIStore.getState());
+    if (lastSelectedRef.current === undefined || !isEqualRef.current(lastSelectedRef.current, nextSelected)) {
+      lastSelectedRef.current = nextSelected;
+    }
+    return lastSelectedRef.current;
+  }, []);
+
+  return useSyncExternalStore(
+    (listener) => playerUIStore.subscribe(listener),
+    getSnapshot,
+    getSnapshot,
+  );
+}
 
 export function usePlayerUIState() {
   return useSyncExternalStore(

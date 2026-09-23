@@ -140,7 +140,13 @@ export function AlbumView({ album, playerController, libraryController }: AlbumV
 
   const playInOrder = () => {
     const firstTrack = tracks[0];
-    if (firstTrack) void playerController.playTrackById(firstTrack.id, tracks);
+    if (firstTrack) {
+      void playerController.playTrackById(firstTrack.id, tracks, true, false, {
+        type: "album",
+        title: album.title,
+        id: album.id,
+      });
+    }
   };
 
   /*
@@ -153,7 +159,11 @@ export function AlbumView({ album, playerController, libraryController }: AlbumV
     const firstTrack = tracks[0];
     if (!firstTrack) return;
     playerController.setPlaybackOrderMode("repeat-all");
-    void playerController.playTrackById(firstTrack.id, tracks);
+    void playerController.playTrackById(firstTrack.id, tracks, true, false, {
+      type: "album",
+      title: album.title,
+      id: album.id,
+    });
   };
 
   /*
@@ -164,7 +174,11 @@ export function AlbumView({ album, playerController, libraryController }: AlbumV
   const playShuffled = async () => {
     const firstTrack = shuffleTracks(tracks)[0];
     if (!firstTrack) return;
-    const started = await playerController.playTrackById(firstTrack.id, tracks, false, true);
+    const started = await playerController.playTrackById(firstTrack.id, tracks, false, true, {
+      type: "album",
+      title: album.title,
+      id: album.id,
+    });
     if (!started) return;
     playerController.setShuffleEnabled(true);
   };
@@ -268,7 +282,11 @@ export function AlbumView({ album, playerController, libraryController }: AlbumV
                     onToggleSelected={() => selection.toggle(track.id, index)}
                     onSelect={(event) => {
                       if (selection.handleRowClick(event, index)) return;
-                      void playerController.playTrackById(track.id, visibleTracks);
+                      void playerController.playTrackById(track.id, visibleTracks, true, false, {
+                        type: "album",
+                        title: album.title,
+                        id: album.id,
+                      });
                     }}
                     showDownload
 

@@ -214,7 +214,13 @@ export function ArtistView({
 
   const playInOrder = () => {
     const songs = page?.allSongs ?? [];
-    if (songs[0]) void playerController.playTrackById(songs[0].id, songs);
+    if (songs[0]) {
+      void playerController.playTrackById(songs[0].id, songs, true, false, {
+        type: "artist",
+        title: displayedArtist.name,
+        id: displayedArtist.id,
+      });
+    }
   };
 
   /*
@@ -225,7 +231,11 @@ export function ArtistView({
     const songs = page?.allSongs ?? [];
     const firstTrack = shuffleTracks(songs)[0];
     if (!firstTrack) return;
-    const started = await playerController.playTrackById(firstTrack.id, songs, false, true);
+    const started = await playerController.playTrackById(firstTrack.id, songs, false, true, {
+      type: "artist",
+      title: displayedArtist.name,
+      id: displayedArtist.id,
+    });
     if (!started) return;
     playerController.setShuffleEnabled(true);
   };
@@ -443,7 +453,12 @@ export function ArtistView({
                         {compactViews(track)}
                       </span>
                     }
-                    onSelect={() => void playerController.playTrackById(track.id, page.allSongs)}
+                    onSelect={() =>
+                      void playerController.playTrackById(track.id, popularSongs, true, false, {
+                        type: "artist",
+                        title: displayedArtist.name,
+                        id: displayedArtist.id,
+                      })}
                     showDownload
 
                     showRating

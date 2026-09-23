@@ -12,6 +12,7 @@ import { hasPreloadDeck } from "./preloadDeck";
 import { getAudioEngineMode, usesRustAudioEngine } from "../ui/settings/audioEngine";
 import { setOutputDevice } from "./rustAudio";
 import { DiscordRpcService } from "./DiscordRPC";
+import { isAndroidEnvironment } from "./androidMediaBridge";
 import {
   MAX_CROSSFADE_SEC,
   readPlaybackSettings,
@@ -96,6 +97,13 @@ export interface PlayerSession {
   playbackOrderMode: PlaybackOrderMode;
   shuffleEnabled?: boolean;
   isPlaylistMode?: boolean;
+  queueContext?: QueueContext | null;
+}
+
+export interface QueueContext {
+  type: "album" | "artist" | "playlist" | "radio" | "custom";
+  title: string;
+  id?: string;
 }
 
 type Listener = () => void;
@@ -207,6 +215,7 @@ export class PlayerController {
   private playbackOrderMode: PlaybackOrderMode = "in-order";
   private shuffleEnabled = false;
   private isPlaylistMode = false;
+  private queueContext: QueueContext | null = null;
   /** Audio resolved ahead of time for the next track, claimed by `ensureTrackLoaded`. */
   private warmedStream: { trackId: string; data: StreamData } | null = null;
   private warmingStream = false;
@@ -284,6 +293,7 @@ export class PlayerController {
       playbackOrderMode: this.playbackOrderMode,
       shuffleEnabled: this.shuffleEnabled,
       isPlaylistMode: this.isPlaylistMode,
+      queueContext: this.queueContext,
     };
   }
 
@@ -292,6 +302,7 @@ export class PlayerController {
     const restoreRequestId = this.playTrackRequestId;
     this.audioEngine.stop();
     this.loadedTrackId = null;
+    this.queueContext = session.queueContext ?? null;
     this.queue.set(
       [...session.queue],
       session.queueIndex,
@@ -385,6 +396,7 @@ export class PlayerController {
     playbackQueue?: readonly Track[],
     autoplayWhenQueueEnds = true,
     shufflePlaylist = false,
+    queueContext?: QueueContext,
   ): Promise<boolean> {
     // Close out whatever was playing first: this is the funnel every track change goes
     // through, so it catches a natural end and a skip with the same one call.
@@ -403,11 +415,17 @@ export class PlayerController {
     this.loadedTrackId = null;
     this.pendingSeekTime = null;
     try {
+      if (queueContext !== undefined) {
+        this.queueContext = queueContext;
+      } else if (playbackQueue && playbackQueue.length > 1) {
+        this.queueContext = { type: "playlist", title: "Queue" };
+      }
+
       if (playbackQueue?.length) {
         const startIndex = playbackQueue.findIndex((track) => track.id === videoId);
         this.queue.set([...playbackQueue], startIndex >= 0 ? startIndex : 0);
         this.autoplayEnabled = autoplayWhenQueueEnds;
-        this.isPlaylistMode = !autoplayWhenQueueEnds && playbackQueue.length > 1;
+        this.isPlaylistMode = Boolean(playbackQueue && playbackQueue.length > 1);
         if (shufflePlaylist && this.isPlaylistMode) {
           this.queue.shuffleAll(this.queue.queuedManually);
         }
@@ -486,6 +504,9 @@ export class PlayerController {
             this.autoplayEnabled = true;
             this.queue.set([track], 0);
             isNewQueueSeed = true;
+            if (!this.queueContext) {
+              this.queueContext = { type: "radio", title: `${track.title} Radio` };
+            }
           }
         }
       }
@@ -1128,6 +1149,7 @@ export class PlayerController {
 
     this.isPlaylistMode = false;
     this.autoplayEnabled = true;
+    this.queueContext = { type: "radio", title: `${seed.title} Radio` };
     this.queue.set(recommendations, 0);
     logInternalInfo("PlayerController.loadQueueEndRecommendations", {
       seedTrackId: seed.id,
@@ -1362,19 +1384,11 @@ export class PlayerController {
       const warmed = this.claimWarmedStream(track.id);
 
       /*
-       * A streamed track on the Rust engine gets the IFrame deck as a safety net.
-       *
-       * Both halves of this can be refused by Google and neither is the listener's fault:
-       * resolving needs a PO token and an InnerTube `player` call, and fetching the signed URL
-       * needs googlevideo to honour it. The IFrame player is the one path that cannot 403 — it
-       * is Google's own embed resolving its own URLs — which is exactly why it was the only
-       * engine between v1.2.65 and PO tokens landing.
-       *
-       * Only for streaming. Local files returned above and have no IFrame equivalent anyway,
-       * and falling back for a *download* would stream the online copy of a track the user
-       * saved on purpose.
+       * A streamed track on the Rust engine gets the IFrame deck as a safety net on desktop.
+       * On Android or when native Rust audio is actively decoding, IFrame fallback is disabled
+       * because Android WebView blocks background iframe media autoplay.
        */
-      const canFallBackToIframe = !isDownloaded;
+      const canFallBackToIframe = !isDownloaded && !this.audioEngine.usesRustAudio() && !isAndroidEnvironment();
       /*
        * The mirror case: the embed is refused not because Google won't resolve the track but
        * because its owner disallows embedded playback at all (error 101/150) — a restriction
@@ -1385,7 +1399,7 @@ export class PlayerController {
       const canFallBackToNative = !useNativeAudio && !isDownloaded;
 
       try {
-        const audioData = useNativeAudio
+        let audioData = useNativeAudio
           ? warmed ?? await this.dataSource.getStreamData?.(track)
           : undefined;
         if (useNativeAudio && !audioData) {
@@ -1402,14 +1416,34 @@ export class PlayerController {
             track.durationSec,
           );
         } else {
-          await this.audioEngine.loadTrack(
-            track.id,
-            audioData?.bytes,
-            audioData?.mimeType,
-            audioData?.sourceUrl,
-            audioData?.rustSource,
-            track.durationSec,
-          );
+          try {
+            await this.audioEngine.loadTrack(
+              track.id,
+              audioData?.bytes,
+              audioData?.mimeType,
+              audioData?.sourceUrl,
+              audioData?.rustSource,
+              track.durationSec,
+            );
+          } catch (loadErr) {
+            // If we attempted with a warmed slot and it failed, re-resolve fresh once.
+            if (warmed && useNativeAudio && this.dataSource.getStreamData) {
+              logInternalWarn("PlayerController.ensureTrackLoaded warmed stream failed, retrying fresh", {
+                trackId: track.id,
+              });
+              audioData = await this.dataSource.getStreamData(track);
+              await this.audioEngine.loadTrack(
+                track.id,
+                audioData?.bytes,
+                audioData?.mimeType,
+                audioData?.sourceUrl,
+                audioData?.rustSource,
+                track.durationSec,
+              );
+            } else {
+              throw loadErr;
+            }
+          }
         }
       } catch (error) {
         if (canFallBackToIframe) {
@@ -1511,7 +1545,7 @@ export class PlayerController {
    * Failures are swallowed on purpose. This is an optimisation; if it does not land,
    * `ensureTrackLoaded` fetches normally and the listener waits exactly as long as before.
    */
-  private warmNextTrack(): void {
+  private warmNextTrack(preloadDeckNearEnd = false): void {
     const next = this.peekNextTrack();
     if (!next) return;
 
@@ -1532,22 +1566,19 @@ export class PlayerController {
     if (!this.audioEngine.usesNativeAudio()) return;
     if (!this.dataSource.getStreamData) return;
     if (this.warmingStream) return;
-    /*
-     * A track already on disk has no network wait to hide, which is all warming ever did on the
-     * `<audio>` engine — so it stays excluded there.
-     *
-     * On the Rust engine warming is not about the network. It decodes the next track onto the
-     * standby deck, and that is the whole mechanism behind gapless. Skipping it here is what
-     * left a downloaded album with a gap between every track while a streamed one played
-     * through seamlessly, which is exactly backwards.
-     */
-    if (
-      (next.source === "local" || isTrackDownloaded(next.id))
-      && !this.audioEngine.usesRustAudio()
-    ) {
+
+    const isLocalOrDownloaded = next.source === "local" || isTrackDownloaded(next.id);
+    if (isLocalOrDownloaded && !this.audioEngine.usesRustAudio()) {
       return;
     }
-    if (this.warmedStream?.trackId === next.id) return;
+    if (this.warmedStream?.trackId === next.id) {
+      if (!isLocalOrDownloaded && preloadDeckNearEnd && this.audioEngine.usesRustAudio() && !this.audioEngine.hasPreloaded(next.id)) {
+        if (this.warmedStream.data.rustSource) {
+          void this.audioEngine.preloadRustTrack(next.id, this.warmedStream.data.rustSource, next.durationSec ?? 0);
+        }
+      }
+      return;
+    }
 
     const getStreamData = this.dataSource.getStreamData.bind(this.dataSource);
     this.warmingStream = true;
@@ -1556,13 +1587,15 @@ export class PlayerController {
         this.warmedStream = { trackId: next.id, data };
         logInternalDebug("PlayerController.warmNextTrack audio ready", { trackId: next.id });
         /*
-         * On the Rust engine the warmed stream goes one step further and is decoded onto the
-         * standby deck, which is what `ensureTrackLoaded` then transitions to. Held in the slot
-         * as well, so a transition that misses — a skip past this track and back, say — still
-         * finds the resolved URL rather than paying for it twice.
+         * On the Rust engine, local and downloaded files can be decoded onto the standby deck
+         * anytime since files on disk never expire. For online streaming URLs, only decode onto
+         * the standby deck if we are within the transition lead window (`preloadDeckNearEnd`).
+         * This prevents streaming connections from idling for minutes and failing health checks.
          */
         if (!data.rustSource || !this.audioEngine.usesRustAudio()) return;
-        await this.audioEngine.preloadRustTrack(next.id, data.rustSource, next.durationSec ?? 0);
+        if (isLocalOrDownloaded || preloadDeckNearEnd) {
+          await this.audioEngine.preloadRustTrack(next.id, data.rustSource, next.durationSec ?? 0);
+        }
       })
       .catch((error) => {
         logInternalWarn("PlayerController.warmNextTrack audio failed", {
@@ -1726,7 +1759,7 @@ export class PlayerController {
     if (remaining <= PRELOAD_LEAD_SEC) {
       if (this.audioEngine.usesRustAudio()) {
         if (!this.audioEngine.hasPreloaded(next.id) && !this.warmingStream) {
-          this.warmNextTrack();
+          this.warmNextTrack(true);
         }
       } else {
         this.audioEngine.preloadNext(next.id);

@@ -522,7 +522,7 @@ class MediaPlaybackService : Service() {
                 currentPlaybackState = newPlaybackState
 
                 if (newIsPlaying || newPlaybackState == "loading" || newPlaybackState == "playing") {
-                    isPlaying = (newPlaybackState == "playing")
+                    isPlaying = (newPlaybackState == "playing" || newPlaybackState == "loading")
                     resumeOnFocusGain = false
                     requestAudioFocus()
                     acquireWakeLock()

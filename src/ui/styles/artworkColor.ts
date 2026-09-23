@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useAdaptiveThemeEnabled } from "../settings/adaptiveTheme";
+import { usePlayerSelector } from "../../player/playerStore";
 
 interface RgbColor {
   r: number;
@@ -85,13 +86,18 @@ export async function extractDominantColor(url: string): Promise<RgbColor> {
  * Hook that keeps the CSS custom properties `--ambient-artwork-color` and `--ambient-artwork-glow`
  * synchronized with the currently playing track's artwork.
  */
-export function useDynamicArtworkTheme(artworkUrl?: string | null): {
+let currentRgb: RgbColor = DEFAULT_RGB;
+
+export function useDynamicArtworkTheme(explicitArtworkUrl?: string | null): {
   colorRgb: RgbColor;
   colorCss: string;
   glowCss: string;
 } {
   const isAdaptive = useAdaptiveThemeEnabled();
-  const [colorRgb, setColorRgb] = useState<RgbColor>(DEFAULT_RGB);
+  const playerArtworkUrl = usePlayerSelector(
+    (state) => state.currentTrack?.artworkUrl ?? null,
+  );
+  const artworkUrl = explicitArtworkUrl !== undefined ? explicitArtworkUrl : playerArtworkUrl;
   const currentUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -108,7 +114,7 @@ export function useDynamicArtworkTheme(artworkUrl?: string | null): {
 
     void extractDominantColor(artworkUrl).then((rgb) => {
       if (!active || currentUrlRef.current !== artworkUrl) return;
-      setColorRgb(rgb);
+      currentRgb = rgb;
 
       const colorCss = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
       const glowCss = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.35)`;
@@ -122,8 +128,8 @@ export function useDynamicArtworkTheme(artworkUrl?: string | null): {
     };
   }, [artworkUrl, isAdaptive]);
 
-  const colorCss = `rgb(${colorRgb.r}, ${colorRgb.g}, ${colorRgb.b})`;
-  const glowCss = `rgba(${colorRgb.r}, ${colorRgb.g}, ${colorRgb.b}, 0.35)`;
+  const colorCss = `rgb(${currentRgb.r}, ${currentRgb.g}, ${currentRgb.b})`;
+  const glowCss = `rgba(${currentRgb.r}, ${currentRgb.g}, ${currentRgb.b}, 0.35)`;
 
-  return { colorRgb, colorCss, glowCss };
+  return { colorRgb: currentRgb, colorCss, glowCss };
 }

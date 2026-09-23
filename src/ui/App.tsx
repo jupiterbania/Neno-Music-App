@@ -67,7 +67,6 @@ import {
   searchController,
   tabManager,
   useLibraryState,
-  usePlayerSession,
   usePlayerSelector,
   shallowEqual,
 } from "../player/playerStore";
@@ -75,7 +74,7 @@ import { clearAppSession, loadAppSession, saveAppSession } from "../player/appSe
 import { useMediaSession } from "../player/useMediaSession";
 import { useAndroidMediaBridge } from "../player/androidMediaBridge";
 import { useAudioKeepalive } from "../player/audioKeepalive";
-import { playerUIStore, usePlayerUIState } from "./stores/playerUIStore";
+import { playerUIStore, usePlayerUISelector } from "./stores/playerUIStore";
 import { AppLoadingScreen } from "./components/AppLoadingScreen";
 import { AuthOverlay } from "./components/AuthOverlay";
 import { UpdateToast } from "./components/UpdateToast";
@@ -298,12 +297,6 @@ async function hasStoredYoutubeSession(): Promise<boolean> {
 export default function App() {
   useDisableContextMenu();
   const libraryState = useLibraryState();
-  /*
-   * Only the three fields the root actually reads. Selecting the whole state here made the
-   * application's largest component a subscriber to every field of it, including volume —
-   * which commits on every pointer move of the slider. Narrowing it is also self-enforcing:
-   * reading a field that is not selected is a type error rather than stale data.
-   */
   const playerState = usePlayerSelector(
     (state) => ({
       currentTrack: state.currentTrack,
@@ -312,11 +305,20 @@ export default function App() {
     }),
     shallowEqual,
   );
-  const playerSession = usePlayerSession();
+  const playerUIState = usePlayerUISelector(
+    (s) => ({
+      isLyricsOpen: s.isLyricsOpen,
+      isLyricsFullscreen: s.isLyricsFullscreen,
+      isQueueOpen: s.isQueueOpen,
+    }),
+    (a, b) =>
+      a.isLyricsOpen === b.isLyricsOpen &&
+      a.isLyricsFullscreen === b.isLyricsFullscreen &&
+      a.isQueueOpen === b.isQueueOpen,
+  );
   /* Resolved once at startup. Null in every case except the first launch after an update —
      see resolveReleaseNoteVersion, which records silently for all the others. */
   const [releaseNoteVersion, setReleaseNoteVersion] = useState<string | null>(null);
-  const playerUIState = usePlayerUIState();
   const miniPlayerEnabled = useMiniPlayerEnabled();
   const miniPlayerWindowLive = useMiniPlayerWindowLive();
   const keyboardShortcuts = useKeyboardShortcuts();
@@ -330,8 +332,8 @@ export default function App() {
   useAndroidMediaBridge();
   // Keep the WebView active during background playback to prevent OS timer suspension
   useAudioKeepalive();
-  // Extract and apply ambient glowing accent colors from current track artwork
-  useDynamicArtworkTheme(playerState.currentTrack?.artworkUrl);
+  // Extract and apply ambient glowing accent colors from current track artwork (subscribes internally)
+  useDynamicArtworkTheme();
 
   // The window is transparent so the app root can round its own corners. When the window
   // is maximised or fullscreen those corners would expose the desktop, so drop the radius.
@@ -835,7 +837,7 @@ export default function App() {
 
   useEffect(() => {
     persistAppSession();
-  }, [activeTabId, nextTabId, persistAppSession, playerSession, tabs]);
+  }, [activeTabId, nextTabId, persistAppSession, tabs]);
 
   useEffect(() => {
     const unlistenPromise = listen("main-window-recovery-reload", persistAppSession);
